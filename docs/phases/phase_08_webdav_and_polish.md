@@ -1,6 +1,6 @@
 # Phase 8: WebDAV Provider, Diff Viewer & Release Readiness
 
-**Phase Status:** `PENDING`  
+**Phase Status:** `COMPLETED`  
 **Estimated Effort:** 4–6 Days  
 **Prerequisites:** [Phase 1 through Phase 7](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/ROADMAP.md) complete.  
 
@@ -18,27 +18,27 @@ Finalize the application for general availability:
 ## 2. Detailed Task Checklist
 
 ### Task 2.1: Generic WebDAV Provider (`io.relayfs.android.core.provider.webdav`)
-- [ ] Implement `WebDavProvider` implementing `CloudProvider`.
-- [ ] Build XML parser for `PROPFIND` multi-status responses using `XmlPullParser`.
-- [ ] Implement HTTP operations: `PROPFIND` (listing), `GET` (download), `PUT` (upload), `MOVE`, `DELETE`.
-- [ ] Handle HTTP Basic and Digest authentication.
-- [ ] Unit tests for WebDAV XML parsing and error status handling.
+- [x] Implement `WebDavProvider` implementing `CloudProvider`.
+- [x] Build XML parser for `PROPFIND` multi-status responses using `XmlPullParser`.
+- [x] Implement HTTP operations: `PROPFIND` (listing), `GET` (download), `PUT` (upload), `MOVE`, `DELETE`.
+- [x] Handle HTTP Basic and Digest authentication.
+- [x] Unit tests for WebDAV XML parsing and error status handling.
 
 ### Task 2.2: In-App Markdown Diff & Conflict Resolution UI (`io.relayfs.android.ui.diff`)
-- [ ] Integrate a lightweight text diff algorithm (e.g. Myers diff).
-- [ ] Build a split-screen / unified diff viewer in Jetpack Compose showing added, removed, and modified lines between local note and branched conflict note.
-- [ ] Actions: "Accept Local", "Accept Remote", or "Merge Changes".
+- [x] Integrate a lightweight text diff algorithm (e.g. Myers diff).
+- [x] Build a split-screen / unified diff viewer in Jetpack Compose showing added, removed, and modified lines between local note and branched conflict note.
+- [x] Actions: "Accept Local", "Accept Remote", or "Merge Changes".
 
 ### Task 2.3: Security Audit & ProGuard Configuration
-- [ ] Configure `proguard-rules.pro` to keep Room, Retrofit, and Kotlinx Serialization models.
-- [ ] Verify that OAuth tokens, passwords, and file paths are never logged in release builds.
+- [x] Configure `proguard-rules.pro` to keep Room, Retrofit, and Kotlinx Serialization models.
+- [x] Verify that OAuth tokens, passwords, and file paths are never logged in release builds.
 
 ### Task 2.4: Release Build Verification
-- [ ] Build release APK:
+- [x] Build release APK:
   ```bash
   ./gradlew assembleRelease
   ```
-- [ ] Validate APK size, resource shrinking, and startup latency.
+- [x] Validate APK size, resource shrinking, and startup latency.
 
 ---
 

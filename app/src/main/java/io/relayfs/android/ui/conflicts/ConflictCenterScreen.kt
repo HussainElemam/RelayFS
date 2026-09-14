@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Difference
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
@@ -51,6 +52,7 @@ fun ConflictCenterScreen(
     onKeepLocal: (SyncConflictEntity) -> Unit,
     onKeepCloud: (SyncConflictEntity) -> Unit,
     onKeepBoth: (SyncConflictEntity) -> Unit,
+    onViewDiff: (SyncConflictEntity) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Scaffold(
@@ -88,7 +90,8 @@ fun ConflictCenterScreen(
                             conflict = conflict,
                             onKeepLocal = { onKeepLocal(conflict) },
                             onKeepCloud = { onKeepCloud(conflict) },
-                            onKeepBoth = { onKeepBoth(conflict) }
+                            onKeepBoth = { onKeepBoth(conflict) },
+                            onReviewDiff = { onViewDiff(conflict) }
                         )
                     }
                 }
@@ -137,6 +140,7 @@ fun ConflictItemCard(
     onKeepLocal: () -> Unit,
     onKeepCloud: () -> Unit,
     onKeepBoth: () -> Unit,
+    onReviewDiff: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -205,7 +209,25 @@ fun ConflictItemCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Review diff button
+            OutlinedButton(
+                onClick = onReviewDiff,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("btn_review_diff_${conflict.id}")
+            ) {
+                Icon(
+                    Icons.Default.Difference,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Review Diff (Side-by-Side / Unified)", style = MaterialTheme.typography.labelMedium)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Action buttons
             Row(

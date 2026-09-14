@@ -15,10 +15,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import io.relayfs.android.core.database.AppDatabase
 import io.relayfs.android.core.power.PowerManagementHelper
 import io.relayfs.android.core.security.TokenStorage
@@ -27,6 +29,8 @@ import io.relayfs.android.ui.accounts.AccountsScreen
 import io.relayfs.android.ui.accounts.AccountsViewModel
 import io.relayfs.android.ui.conflicts.ConflictCenterScreen
 import io.relayfs.android.ui.conflicts.ConflictCenterViewModel
+import io.relayfs.android.ui.diff.DiffViewerScreen
+import io.relayfs.android.ui.diff.DiffViewerViewModel
 import io.relayfs.android.ui.dashboard.DashboardScreen
 import io.relayfs.android.ui.dashboard.DashboardViewModel
 import io.relayfs.android.ui.logs.ActivityLogScreen
@@ -160,7 +164,28 @@ fun RelayFSApp(
                     uiState = uiState,
                     onKeepLocal = { conflict -> conflictsViewModel.resolveKeepLocal(conflict) },
                     onKeepCloud = { conflict -> conflictsViewModel.resolveKeepCloud(conflict) },
-                    onKeepBoth = { conflict -> conflictsViewModel.resolveKeepBoth(conflict) }
+                    onKeepBoth = { conflict -> conflictsViewModel.resolveKeepBoth(conflict) },
+                    onViewDiff = { conflict -> navController.navigate(Screen.DiffViewer.createRoute(conflict.id)) }
+                )
+            }
+
+            composable(
+                route = Screen.DiffViewer.route,
+                arguments = listOf(navArgument("conflictId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val conflictId = backStackEntry.arguments?.getString("conflictId") ?: ""
+                val diffViewModel: DiffViewerViewModel = viewModel(
+                    factory = DiffViewerViewModel.Factory(database, conflictId)
+                )
+                val uiState by diffViewModel.uiState.collectAsState()
+
+                DiffViewerScreen(
+                    uiState = uiState,
+                    onToggleMode = { diffViewModel.toggleViewMode() },
+                    onKeepLocal = { diffViewModel.resolveKeepLocal() },
+                    onKeepCloud = { diffViewModel.resolveKeepCloud() },
+                    onKeepBoth = { diffViewModel.resolveKeepBoth() },
+                    onNavigateUp = { navController.navigateUp() }
                 )
             }
 

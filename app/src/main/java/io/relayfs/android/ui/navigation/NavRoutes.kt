@@ -20,6 +20,9 @@ sealed class Screen(
     data object Conflicts : Screen("conflicts", "Conflicts", Icons.Default.Warning)
     data object Logs : Screen("logs", "Activity", Icons.Default.History)
     data object FolderPairWizard : Screen("pair_wizard", "New Folder Pair")
+    data object DiffViewer : Screen("diff_viewer/{conflictId}", "Diff Viewer") {
+        fun createRoute(conflictId: String) = "diff_viewer/$conflictId"
+    }
 
     companion object {
         val bottomNavItems: List<Screen>
