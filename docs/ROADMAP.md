@@ -11,7 +11,7 @@ This tracker maintains the live state of implementation across all development p
 | **Phase 1** | [Core Architecture & Domain Models](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) | Domain models, Room DB schema, Keystore security, CloudProvider contract | `COMPLETED` | Week 1 |
 | **Phase 2** | [pCloud Client & OAuth2 PKCE](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_02_pcloud_client_and_oauth.md) | pCloud REST API, OAuth2 PKCE, delta change detection, chunked upload | `COMPLETED` | Week 2 |
 | **Phase 3** | [3-Way Reconciliation Engine](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_03_sync_engine_core.md) | 3-way sync engine, 11-state matrix, conflict branching, atomic writes | `COMPLETED` | Week 3–4 |
-| **Phase 4** | [Filesystem Watcher & Storage](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_04_filesystem_watcher_and_storage.md) | Recursive FileObserver (inotify), debouncing queue, Scoped Storage | `PENDING` | Week 5 |
+| **Phase 4** | [Filesystem Watcher & Storage](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_04_filesystem_watcher_and_storage.md) | Recursive FileObserver (inotify), debouncing queue, Scoped Storage | `COMPLETED` | Week 5 |
 | **Phase 5** | [Background Sync & WorkManager](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_05_background_sync_and_workmanager.md) | WorkManager periodic sync, ForegroundService (dataSync), battery handling | `PENDING` | Week 6 |
 | **Phase 6** | [Compose UI & Obsidian Presets](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_06_ui_dashboard_and_obsidian_mode.md) | Material 3 UI, Folder pair config, Obsidian auto-detection, Conflict Center | `PENDING` | Week 7–8 |
 | **Phase 7** | [DocumentsProvider Virtual Drive](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_07_documents_provider.md) | SAF DocumentsProvider, SQLite metadata cache, seekable PFD, OnClose upload | `PENDING` | Week 9–10 |
@@ -19,10 +19,10 @@ This tracker maintains the live state of implementation across all development p
 
 ---
 
-## Active Phase: Phase 4 (Filesystem Watcher & Storage Permissions)
+## Active Phase: Phase 5 (Background Sync & WorkManager)
 
-> **Agent Instruction:** Phase 3 is complete. To continue implementation, instruct the agent:  
-> *"Implement Phase 4 according to docs/phases/phase_04_filesystem_watcher_and_storage.md"*
+> **Agent Instruction:** Phase 4 is complete. To continue implementation, instruct the agent:  
+> *"Implement Phase 5 according to docs/phases/phase_05_background_sync_and_workmanager.md"*
 
 ---
 
@@ -54,11 +54,11 @@ This tracker maintains the live state of implementation across all development p
 - [x] Unit tests covering all 11 reconciliation states and conflict edge cases
 
 ### Phase 4: Filesystem Watcher & Storage Permissions
-- [ ] `MANAGE_EXTERNAL_STORAGE` permission flow and system settings launcher
-- [ ] Fallback SAF `ACTION_OPEN_DOCUMENT_TREE` support
-- [ ] Recursive `FileObserver` monitoring directory trees
-- [ ] Event debouncing queue (3-second quiet window)
-- [ ] Unit & Robolectric tests for watcher event debouncing
+- [x] `MANAGE_EXTERNAL_STORAGE` permission flow and system settings launcher
+- [x] Fallback SAF `ACTION_OPEN_DOCUMENT_TREE` support
+- [x] Recursive `FileObserver` monitoring directory trees
+- [x] Event debouncing queue (3-second quiet window)
+- [x] Unit & Robolectric tests for watcher event debouncing
 
 ### Phase 5: Background Sync & WorkManager
 - [ ] `SyncWorker` implementation with network and battery constraints

@@ -1,6 +1,6 @@
 # Phase 4: Filesystem Watcher & Storage Permissions
 
-**Phase Status:** `PENDING`  
+**Phase Status:** `COMPLETED`  
 **Estimated Effort:** 3–5 Days  
 **Prerequisites:** [Phase 3: 3-Way Reconciliation Engine](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_03_sync_engine_core.md) complete.  
 
@@ -19,32 +19,32 @@ Enable real-time detection of local file edits:
 ## 2. Detailed Task Checklist
 
 ### Task 2.1: Storage Permissions Manager (`io.relayfs.android.core.storage`)
-- [ ] Implement `StoragePermissionHelper`:
+- [x] Implement `StoragePermissionHelper`:
   * Checks if `Environment.isExternalStorageManager()` is granted (Android 11+).
   * Generates Intent for `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION`.
   * Provides fallback launcher for `ACTION_OPEN_DOCUMENT_TREE` with `takePersistableUriPermission`.
 
 ### Task 2.2: Exclusion Filter Engine (`io.relayfs.android.core.watcher.filter`)
-- [ ] Implement `PathFilter`:
+- [x] Implement `PathFilter`:
   * Evaluates paths against glob and prefix rules.
   * Rejects `.git`, `.trash`, `.sync_tmp`, `workspace.json`, `workspace-mobile.json`, `.cache`.
   * Unit tests for path filtering.
 
 ### Task 2.3: Recursive `FileObserver` (`io.relayfs.android.core.watcher`)
-- [ ] Implement `RecursiveFileWatcher`:
+- [x] Implement `RecursiveFileWatcher`:
   * Recursively traverses local directories and attaches `FileObserver` to all subdirectories.
   * Handles dynamic subfolder creation (`CREATE` / `MOVED_TO`) by attaching new watchers on the fly.
   * Cleans up observers when subfolders are deleted.
 
 ### Task 2.4: Coroutine Debouncing Queue (`io.relayfs.android.core.watcher.debounce`)
-- [ ] Implement `DebounceEventQueue`:
+- [x] Implement `DebounceEventQueue`:
   * Receives file events, filters out excluded paths.
   * Collects distinct modified relative paths in a set.
   * Cancels previous timer and restarts a 3-second delay on each new event.
   * Upon timeout, emits a single batch of dirty paths to the sync pipeline.
 
 ### Task 2.5: Automated Tests
-- [ ] Unit tests for `DebounceEventQueue` using `kotlinx.coroutines.test.TestCoroutineScheduler` / virtual time:
+- [x] Unit tests for `DebounceEventQueue` using `kotlinx.coroutines.test.TestCoroutineScheduler` / virtual time:
   * Verify 10 rapid events within 1 second emit only 1 batch after 3 seconds.
   * Verify excluded files are completely ignored.
 
