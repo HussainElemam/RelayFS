@@ -8,7 +8,7 @@ This tracker maintains the live state of implementation across all development p
 
 | Phase | Title | Focus Area | Status | Target Completion |
 | :--- | :--- | :--- | :--- | :--- |
-| **Phase 1** | [Core Architecture & Domain Models](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) | Domain models, Room DB schema, Keystore security, CloudProvider contract | `PENDING` | Week 1 |
+| **Phase 1** | [Core Architecture & Domain Models](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) | Domain models, Room DB schema, Keystore security, CloudProvider contract | `COMPLETED` | Week 1 |
 | **Phase 2** | [pCloud Client & OAuth2 PKCE](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_02_pcloud_client_and_oauth.md) | pCloud REST API, OAuth2 PKCE, delta change detection, chunked upload | `PENDING` | Week 2 |
 | **Phase 3** | [3-Way Reconciliation Engine](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_03_sync_engine_core.md) | 3-way sync engine, 11-state matrix, conflict branching, atomic writes | `PENDING` | Week 3–4 |
 | **Phase 4** | [Filesystem Watcher & Storage](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_04_filesystem_watcher_and_storage.md) | Recursive FileObserver (inotify), debouncing queue, Scoped Storage | `PENDING` | Week 5 |
@@ -19,22 +19,22 @@ This tracker maintains the live state of implementation across all development p
 
 ---
 
-## Active Phase: None (Ready for Phase 1 Kickoff)
+## Active Phase: Phase 2 (pCloud Client & OAuth2 PKCE)
 
-> **Agent Instruction:** To begin implementation, instruct the agent:  
-> *"Implement Phase 1 according to docs/phases/phase_01_core_architecture_and_models.md"*
+> **Agent Instruction:** Phase 1 is complete. To continue implementation, instruct the agent:  
+> *"Implement Phase 2 according to docs/phases/phase_02_pcloud_client_and_oauth.md"*
 
 ---
 
 ## Phase Status Summary
 
 ### Phase 1: Core Architecture & Domain Models
-- [ ] Multi-module or package structure established
-- [ ] Core domain models defined (`SyncPair`, `FileItem`, `SyncConflict`, `AccountInfo`)
-- [ ] Room SQLite database entities and DAOs created (`FolderPairEntity`, `SyncBaselineEntity`, `SyncLogEntity`)
-- [ ] Keystore token storage implemented (`TokenStorage` with `EncryptedSharedPreferences`)
-- [ ] `CloudProvider` interface contract finalized
-- [ ] Unit tests for database migrations and DAOs passing
+- [x] Multi-module or package structure established
+- [x] Core domain models defined (`SyncPair`, `FileItem`, `SyncConflict`, `AccountInfo`)
+- [x] Room SQLite database entities and DAOs created (`FolderPairEntity`, `SyncBaselineEntity`, `SyncLogEntity`)
+- [x] Keystore token storage implemented (`TokenStorage` with `EncryptedSharedPreferences`)
+- [x] `CloudProvider` interface contract finalized
+- [x] Unit tests for database migrations and DAOs passing
 
 ### Phase 2: pCloud Client & OAuth2 PKCE
 - [ ] pCloud API models (JSON serialization for `listfolder`, `diff`, `upload`)
