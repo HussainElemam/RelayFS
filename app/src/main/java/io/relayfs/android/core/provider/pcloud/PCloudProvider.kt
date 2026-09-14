@@ -254,6 +254,26 @@ class PCloudProvider(
         }
     }
 
+    override suspend fun getThumbnail(
+        remoteId: String,
+        width: Int,
+        height: Int,
+        destinationFile: File
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val fileId = parseFileId(remoteId)
+            val size = "${width}x${height}"
+            val response = apiClient.apiService.getThumbLink(fileId = fileId, size = size)
+            val body = response.body()
+            if (!response.isSuccessful || body == null || body.result != 0) {
+                throw IOException("getThumbLink failed: ${body?.error ?: response.message()}")
+            }
+            val downloadUrl = body.downloadUrl
+                ?: throw IOException("No thumbnail CDN host returned for file $remoteId")
+            apiClient.downloadFileStream(downloadUrl, destinationFile).getOrThrow()
+        }
+    }
+
     private fun collectItemsRecursively(
         item: PCloudItemMetadata,
         currentPath: String,

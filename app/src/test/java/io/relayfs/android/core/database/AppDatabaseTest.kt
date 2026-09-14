@@ -2,12 +2,15 @@ package io.relayfs.android.core.database
 
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import androidx.sqlite.db.SupportSQLiteDatabase
 import io.relayfs.android.core.database.dao.FolderPairDao
+import io.relayfs.android.core.database.dao.SafMetadataDao
 import io.relayfs.android.core.database.dao.SyncBaselineDao
 import io.relayfs.android.core.database.dao.SyncConflictDao
 import io.relayfs.android.core.database.dao.SyncLogDao
 import io.relayfs.android.core.database.entity.FolderPairEntity
 import io.relayfs.android.core.database.entity.LogLevel
+import io.relayfs.android.core.database.entity.SafMetadataEntity
 import io.relayfs.android.core.database.entity.SyncBaselineEntity
 import io.relayfs.android.core.database.entity.SyncConflictEntity
 import io.relayfs.android.core.database.entity.SyncLogEntity
@@ -294,5 +297,91 @@ class AppDatabaseTest {
         val remaining = syncLogDao.getRecentLogsForPair("pair-log").first()
         assertEquals(1, remaining.size)
         assertEquals("Msg 3", remaining[0].message)
+    }
+
+    @Test
+    fun testSafMetadataOperations() = runTest {
+        val safDao = database.safMetadataDao()
+
+        val rootFolder = SafMetadataEntity(
+            documentId = "d0",
+            parentDocumentId = null,
+            accountId = "acc-1",
+            displayName = "pCloud",
+            mimeType = "vnd.android.document/directory",
+            isDirectory = true,
+            cachedAt = 1000L
+        )
+        val childFolder = SafMetadataEntity(
+            documentId = "d100",
+            parentDocumentId = "d0",
+            accountId = "acc-1",
+            displayName = "Documents",
+            mimeType = "vnd.android.document/directory",
+            isDirectory = true,
+            cachedAt = 1000L
+        )
+        val childFile = SafMetadataEntity(
+            documentId = "f200",
+            parentDocumentId = "d0",
+            accountId = "acc-1",
+            displayName = "notes.txt",
+            mimeType = "text/plain",
+            sizeBytes = 1024L,
+            isDirectory = false,
+            cachedAt = 1000L
+        )
+
+        safDao.insertOrUpdate(listOf(rootFolder, childFolder, childFile))
+
+        val retrieved = safDao.getById("f200")
+        assertNotNull(retrieved)
+        assertEquals("notes.txt", retrieved?.displayName)
+        assertEquals(1024L, retrieved?.sizeBytes)
+
+        val children = safDao.getChildren("d0")
+        assertEquals(2, children.size)
+        // Check sorting: directories first, then alphabetical
+        assertTrue(children[0].isDirectory)
+        assertEquals("Documents", children[0].displayName)
+        assertEquals("notes.txt", children[1].displayName)
+
+        // Test delete
+        safDao.deleteById("f200")
+        assertNull(safDao.getById("f200"))
+        assertEquals(1, safDao.getChildren("d0").size)
+
+        // Test delete children
+        safDao.deleteChildren("d0")
+        assertEquals(0, safDao.getChildren("d0").size)
+    }
+
+    @Test
+    fun testSafMigration1To2Sql() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dbHelper = androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory()
+            .create(
+                androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+                    .name("migration_test.db")
+                    .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(1) {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            // Empty schema version 1
+                        }
+                        override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) {}
+                    })
+                    .build()
+            )
+
+        val db = dbHelper.writableDatabase
+        try {
+            AppDatabase.MIGRATION_1_2.migrate(db)
+            // Verify table and indexes created without SQL errors
+            val cursor = db.query("SELECT * FROM saf_metadata_cache")
+            assertNotNull(cursor)
+            cursor.close()
+        } finally {
+            db.close()
+            context.deleteDatabase("migration_test.db")
+        }
     }
 }

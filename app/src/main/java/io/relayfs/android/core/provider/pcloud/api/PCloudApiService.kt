@@ -29,6 +29,13 @@ interface PCloudApiService {
         @Query("fileid") fileId: Long
     ): Response<PCloudFileLinkResponse>
 
+    @GET("getthumblink")
+    suspend fun getThumbLink(
+        @Query("fileid") fileId: Long,
+        @Query("size") size: String,
+        @Query("crop") crop: Int = 0
+    ): Response<PCloudFileLinkResponse>
+
     @POST("createfolder")
     suspend fun createFolder(
         @Query("folderid") parentFolderId: Long,

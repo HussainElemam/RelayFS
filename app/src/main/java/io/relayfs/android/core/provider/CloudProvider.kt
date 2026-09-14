@@ -98,5 +98,16 @@ interface CloudProvider {
      * Deletes a remote file or folder.
      */
     suspend fun deleteItem(remoteId: String, isDirectory: Boolean): Result<Unit>
+
+    /**
+     * Retrieves an image or video thumbnail for a remote file.
+     * Implementations that do not support thumbnails may return a failure Result.
+     */
+    suspend fun getThumbnail(
+        remoteId: String,
+        width: Int,
+        height: Int,
+        destinationFile: File
+    ): Result<Unit> = Result.failure(UnsupportedOperationException("Thumbnails not supported by this provider"))
 }
 
