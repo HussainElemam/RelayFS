@@ -19,6 +19,9 @@ interface SyncLogDao {
     @Query("SELECT * FROM sync_logs WHERE folderPairId = :folderPairId ORDER BY timestamp DESC LIMIT :limit")
     fun getRecentLogsForPair(folderPairId: String, limit: Int = 100): Flow<List<SyncLogEntity>>
 
+    @Query("SELECT * FROM sync_logs ORDER BY timestamp DESC LIMIT :limit")
+    fun getAllRecentLogsFlow(limit: Int = 100): Flow<List<SyncLogEntity>>
+
     @Query("DELETE FROM sync_logs WHERE timestamp < :timestamp")
     suspend fun deleteOlderThan(timestamp: Long)
 

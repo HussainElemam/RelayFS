@@ -57,6 +57,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.androidx.navigation.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     // Room SQLite Database
     implementation(libs.androidx.room.runtime)
@@ -83,6 +86,7 @@ dependencies {
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.mockwebserver)
     testImplementation(libs.androidx.work.testing)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

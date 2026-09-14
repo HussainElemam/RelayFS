@@ -41,9 +41,8 @@ class SyncForegroundService : Service() {
         super.onCreate()
         SyncNotificationManager.createNotificationChannels(this)
         database = AppDatabase.build(this)
-        val tokenStorage = EncryptedSharedPrefsTokenStorage(this)
         val providerFactory: CloudProviderFactory = customCloudProviderFactory
-            ?: DefaultCloudProviderFactory(tokenStorage)
+            ?: DefaultCloudProviderFactory(EncryptedSharedPrefsTokenStorage(this))
         coordinator = SyncCoordinator(
             database = database,
             cloudProviderFactory = providerFactory,
@@ -138,9 +137,9 @@ class SyncForegroundService : Service() {
                 if (!root.exists() || !root.isDirectory) continue
 
                 val debounceQueue = DebounceEventQueue(
-                    debounceWindowMs = 3_000L,
-                    coroutineScope = serviceScope,
-                    onBatchReady = {
+                    scope = serviceScope,
+                    debouncePeriodMs = 3_000L,
+                    onDebouncedBatch = {
                         serviceScope.launch {
                             coordinator.syncFolderPair(pair.id) { title, detail, current, total ->
                                 updateNotification(title, detail, total, current)
@@ -160,9 +159,7 @@ class SyncForegroundService : Service() {
                     }
                 )
 
-                watcher.addListener { event ->
-                    debounceQueue.submit(event)
-                }
+                debounceQueue.attachToWatcher(watcher)
                 watcher.startWatching()
                 activeWatchers.add(watcher)
             }
