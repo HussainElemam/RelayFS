@@ -97,3 +97,4 @@ class PathFilterTest {
         assertFalse(filter.shouldExclude(regularFile, rootDir))
     }
 }
+

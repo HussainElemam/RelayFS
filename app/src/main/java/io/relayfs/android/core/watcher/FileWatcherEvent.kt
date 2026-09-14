@@ -29,3 +29,4 @@ data class FileWatcherEvent(
     val isDirectory: Boolean,
     val timestamp: Long = System.currentTimeMillis()
 )
+

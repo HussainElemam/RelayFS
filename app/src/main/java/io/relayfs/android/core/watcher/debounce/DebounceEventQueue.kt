@@ -122,3 +122,4 @@ class DebounceEventQueue(
         const val DEFAULT_DEBOUNCE_MS: Long = 3000L
     }
 }
+

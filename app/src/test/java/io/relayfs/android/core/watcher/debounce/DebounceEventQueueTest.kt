@@ -196,3 +196,4 @@ class DebounceEventQueueTest {
         assertTrue(queue.getPendingPaths().isEmpty())
     }
 }
+
