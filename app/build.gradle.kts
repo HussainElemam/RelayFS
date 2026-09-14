@@ -6,6 +6,15 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+import java.util.Properties
+
+val localProperties = Properties()
+val localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.inputStream().use { localProperties.load(it) }
+}
+val pcloudClientId: String = localProperties.getProperty("PCLOUD_CLIENT_ID") ?: ""
+
 android {
     namespace = "io.relayfs.android"
     compileSdk {
@@ -20,6 +29,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "PCLOUD_CLIENT_ID", "\"$pcloudClientId\"")
     }
 
     buildTypes {
@@ -40,6 +51,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     testOptions {
         unitTests {

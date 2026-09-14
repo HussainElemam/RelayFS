@@ -77,7 +77,8 @@ fun AccountsScreen(
                 )
             } else {
                 ConnectAccountPrompt(
-                    onConnectClicked = onConnectClicked
+                    onConnectClicked = onConnectClicked,
+                    errorMessage = uiState.errorMessage
                 )
             }
 
@@ -207,6 +208,7 @@ fun ConnectedAccountCard(
 @Composable
 fun ConnectAccountPrompt(
     onConnectClicked: () -> Unit,
+    errorMessage: String? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -233,11 +235,28 @@ fun ConnectAccountPrompt(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Log in securely using OAuth 2.0 with PKCE to allow RelayFS to sync your local folders with pCloud storage.",
+                text = "Log in securely using OAuth 2.0 to allow RelayFS to sync your local folders with pCloud storage.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
+
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = errorMessage,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.padding(12.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = onConnectClicked,

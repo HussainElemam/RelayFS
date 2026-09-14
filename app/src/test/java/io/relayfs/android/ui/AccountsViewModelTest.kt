@@ -59,5 +59,31 @@ class AccountsViewModelTest {
         assertFalse(viewModel.uiState.value.isConnected)
         assertFalse(viewModel.uiState.value.showDisconnectDialog)
     }
+
+    @Test
+    fun testStartOAuthLoginWithoutClientIdSetsErrorMessage() {
+        val emptyClientVm = AccountsViewModel(tokenStorage, defaultClientId = "")
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+
+        emptyClientVm.startOAuthLogin(context)
+
+        assertTrue(emptyClientVm.uiState.value.errorMessage?.contains("pCloud Client ID not configured") == true)
+        emptyClientVm.cancelActiveJobs()
+    }
+
+    @Test
+    fun testTokenFlowDirectlySavesToken() = runTest {
+        io.relayfs.android.core.provider.pcloud.auth.OAuthEventBus.emitCallback(
+            io.relayfs.android.core.provider.pcloud.auth.OAuthCallbackData(
+                accessToken = "direct_token_xyz",
+                locationId = 1
+            )
+        )
+
+        // Give the coroutine a moment to consume the event
+        kotlinx.coroutines.delay(100)
+
+        assertEquals("direct_token_xyz", tokenStorage.getToken(AccountsViewModel.DEFAULT_ACCOUNT_ID))
+    }
 }
 

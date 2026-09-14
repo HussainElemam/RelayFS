@@ -8,9 +8,12 @@ import kotlinx.coroutines.flow.asSharedFlow
  * Result data payload parsed from pCloud's redirect callback URI.
  */
 data class OAuthCallbackData(
-    val authCode: String,
-    val locationId: Int // 1 = US (api.pcloud.com), 2 = EU (eapi.pcloud.com)
-)
+    val accessToken: String? = null,
+    val authCode: String? = null,
+    val locationId: Int = 1 // 1 = US (api.pcloud.com), 2 = EU (eapi.pcloud.com)
+) {
+    constructor(authCode: String, locationId: Int) : this(accessToken = null, authCode = authCode, locationId = locationId)
+}
 
 /**
  * Lightweight reactive event bus for delivering OAuth authorization callbacks to listening components.

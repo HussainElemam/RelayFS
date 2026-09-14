@@ -23,13 +23,15 @@ class OAuthCallbackActivity : Activity() {
 
     private fun handleIntent(intent: Intent?) {
         val uri = intent?.data ?: return
-        val code = uri.getQueryParameter("code")
-        val locationIdStr = uri.getQueryParameter("locationid")
-        val locationId = locationIdStr?.toIntOrNull() ?: 1 // Default to US (1)
+        val params = OAuthPkceHelper.parseCallbackUri(uri)
+        val accessToken = params["access_token"]
+        val code = params["code"]
+        val locationId = params["locationid"]?.toIntOrNull() ?: 1 // Default to US (1)
 
-        if (!code.isNullOrBlank()) {
+        if (!accessToken.isNullOrBlank() || !code.isNullOrBlank()) {
             OAuthEventBus.emitCallback(
                 OAuthCallbackData(
+                    accessToken = accessToken,
                     authCode = code,
                     locationId = locationId
                 )

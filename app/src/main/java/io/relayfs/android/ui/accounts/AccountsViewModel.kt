@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import io.relayfs.android.BuildConfig
 import io.relayfs.android.core.provider.pcloud.api.PCloudApiClient
 import io.relayfs.android.core.provider.pcloud.auth.OAuthEventBus
 import io.relayfs.android.core.provider.pcloud.auth.OAuthPkceHelper
@@ -30,7 +31,7 @@ data class AccountsUiState(
 
 class AccountsViewModel(
     private val tokenStorage: TokenStorage,
-    private val defaultClientId: String = "XmR5k2M8p9L"
+    private val defaultClientId: String = BuildConfig.PCLOUD_CLIENT_ID
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountsUiState(isLoading = true))
@@ -93,38 +94,50 @@ class AccountsViewModel(
     private fun observeOAuthCallbacks() {
         oauthJob = viewModelScope.launch {
             OAuthEventBus.events.collect { callbackData ->
-                val verifier = pendingCodeVerifier ?: return@collect
-                _uiState.update { it.copy(isLoading = true) }
+                _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
                 try {
-                    val baseUrl = if (callbackData.locationId == 2) {
-                        PCloudApiClient.EU_API_URL
-                    } else {
-                        PCloudApiClient.US_API_URL
+                    // Token flow (implicit): token received directly in redirect fragment
+                    val token = callbackData.accessToken
+                    if (!token.isNullOrBlank()) {
+                        tokenStorage.saveToken(DEFAULT_ACCOUNT_ID, token)
+                        loadAccount()
+                        return@collect
                     }
 
-                    val client = PCloudApiClient(
-                        baseUrl = baseUrl,
-                        tokenProvider = { null }
-                    )
+                    // Fallback to Code flow if an authorization code was returned
+                    val authCode = callbackData.authCode
+                    if (!authCode.isNullOrBlank()) {
+                        val verifier = pendingCodeVerifier ?: ""
+                        val baseUrl = if (callbackData.locationId == 2) {
+                            PCloudApiClient.EU_API_URL
+                        } else {
+                            PCloudApiClient.US_API_URL
+                        }
 
-                    val response = client.apiService.exchangeToken(
-                        clientId = defaultClientId,
-                        code = callbackData.authCode,
-                        codeVerifier = verifier
-                    )
+                        val client = PCloudApiClient(
+                            baseUrl = baseUrl,
+                            tokenProvider = { null }
+                        )
 
-                    val body = response.body()
-                    if (response.isSuccessful && body != null && body.result == 0) {
-                        tokenStorage.saveToken(DEFAULT_ACCOUNT_ID, body.accessToken)
-                        pendingCodeVerifier = null
-                        loadAccount()
-                    } else {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                errorMessage = "Token exchange failed: ${body?.error ?: response.message()}"
-                            )
+                        val response = client.apiService.exchangeToken(
+                            clientId = defaultClientId,
+                            code = authCode,
+                            codeVerifier = verifier
+                        )
+
+                        val body = response.body()
+                        if (response.isSuccessful && body != null && body.result == 0) {
+                            tokenStorage.saveToken(DEFAULT_ACCOUNT_ID, body.accessToken)
+                            pendingCodeVerifier = null
+                            loadAccount()
+                        } else {
+                            _uiState.update {
+                                it.copy(
+                                    isLoading = false,
+                                    errorMessage = "Token exchange failed: ${body?.error ?: response.message()}"
+                                )
+                            }
                         }
                     }
                 } catch (e: Exception) {
@@ -140,13 +153,21 @@ class AccountsViewModel(
     }
 
     fun startOAuthLogin(context: Context) {
-        val verifier = OAuthPkceHelper.generateCodeVerifier()
-        pendingCodeVerifier = verifier
-        val challenge = OAuthPkceHelper.generateCodeChallenge(verifier)
+        if (defaultClientId.isBlank()) {
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    errorMessage = "pCloud Client ID not configured. Please set PCLOUD_CLIENT_ID in local.properties"
+                )
+            }
+            return
+        }
+
+        // Use pCloud's recommended Token flow (response_type=token) for mobile applications
         OAuthPkceHelper.launchOAuthFlow(
             context = context,
             clientId = defaultClientId,
-            codeChallenge = challenge
+            responseType = "token"
         )
     }
 

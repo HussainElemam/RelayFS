@@ -33,6 +33,12 @@
 * Never overwrite a file during a conflict; always branch into a distinct conflict copy.
 * Wrap all database modifications in transactions.
 
+### 1.5 Proactive Communication on User-Required External Setup
+* Whenever a feature or phase relies on external credentials, third-party developer registrations (e.g. pCloud Developer Portal, OAuth App approval, API keys, Webhooks), or manual device setup:
+  * The agent **must proactively and clearly inform the user upfront** before proceeding with or finalizing features that require these external services.
+  * The agent must explicitly document the required user steps (portal URL, fields to fill such as `redirect_uri`, expected review/approval wait times, and how credentials are supplied).
+  * **Never silently rely on dummy/mock credentials** in runtime code paths without informing the user that live execution requires their external configuration.
+
 ---
 
 ## 2. Project Architecture & Standards

@@ -30,7 +30,9 @@ Do not attempt to implement the entire project or skip ahead.
 1. Read `docs/ROADMAP.md` to identify the active phase.
 2. Open `docs/phases/phase_XX_*.md`.
 3. Complete only the tasks listed in that phase.
-4. Run deterministic tests: `./gradlew testDebugUnitTest`.
-5. Update checkboxes in the phase file and `docs/ROADMAP.md`.
-6. **STOP and present results to the user for review.**
+4. **Notify user upfront** if external credentials or developer portal registrations (e.g. OAuth apps, API keys) are needed. Never leave silent mock credentials.
+5. Run deterministic tests: `./gradlew testDebugUnitTest`.
+6. Update checkboxes in the phase file and `docs/ROADMAP.md`.
+7. **STOP and present results to the user for review.**
+
 

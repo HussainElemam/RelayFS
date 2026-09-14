@@ -43,18 +43,25 @@ object OAuthPkceHelper {
     }
 
     /**
-     * Constructs the pCloud authorization URL for OAuth 2.0 with PKCE.
+     * Constructs the pCloud authorization URL for OAuth 2.0.
+     *
+     * @param responseType Either "token" (implicit Token flow for mobile) or "code" (PKCE Code flow).
      */
     fun buildAuthorizeUrl(
         clientId: String,
-        codeChallenge: String,
-        redirectUri: String = DEFAULT_REDIRECT_URI
+        codeChallenge: String? = null,
+        redirectUri: String = DEFAULT_REDIRECT_URI,
+        responseType: String = if (codeChallenge != null) "code" else "token"
     ): String {
         val encodedRedirect = java.net.URLEncoder.encode(redirectUri, "UTF-8")
-        val encodedChallenge = java.net.URLEncoder.encode(codeChallenge, "UTF-8")
         val encodedClientId = java.net.URLEncoder.encode(clientId, "UTF-8")
 
-        return "$PCLOUD_AUTHORIZE_URL?client_id=$encodedClientId&response_type=code&code_challenge=$encodedChallenge&code_challenge_method=S256&redirect_uri=$encodedRedirect"
+        val sb = StringBuilder("$PCLOUD_AUTHORIZE_URL?client_id=$encodedClientId&response_type=$responseType&redirect_uri=$encodedRedirect")
+        if (responseType == "code" && !codeChallenge.isNullOrBlank()) {
+            val encodedChallenge = java.net.URLEncoder.encode(codeChallenge, "UTF-8")
+            sb.append("&code_challenge=$encodedChallenge&code_challenge_method=S256")
+        }
+        return sb.toString()
     }
 
     /**
@@ -63,10 +70,11 @@ object OAuthPkceHelper {
     fun launchOAuthFlow(
         context: Context,
         clientId: String,
-        codeChallenge: String,
-        redirectUri: String = DEFAULT_REDIRECT_URI
+        codeChallenge: String? = null,
+        redirectUri: String = DEFAULT_REDIRECT_URI,
+        responseType: String = if (codeChallenge != null) "code" else "token"
     ) {
-        val authorizeUrl = buildAuthorizeUrl(clientId, codeChallenge, redirectUri)
+        val authorizeUrl = buildAuthorizeUrl(clientId, codeChallenge, redirectUri, responseType)
         val uri = Uri.parse(authorizeUrl)
 
         try {
@@ -80,6 +88,43 @@ object OAuthPkceHelper {
             }
             context.startActivity(browserIntent)
         }
+    }
+
+    /**
+     * Parses parameters from an OAuth redirect callback URI, inspecting both the URI fragment
+     * (used by pCloud's Token flow: redirect_uri#access_token=...&locationid=...) and the query string
+     * (used by Code flow: redirect_uri?code=...&locationid=...).
+     */
+    fun parseCallbackUri(uri: Uri): Map<String, String> {
+        val params = mutableMapOf<String, String>()
+
+        val fragment = uri.fragment
+        if (!fragment.isNullOrBlank()) {
+            fragment.split("&").forEach { pair ->
+                val parts = pair.split("=", limit = 2)
+                if (parts.size == 2) {
+                    val key = parts[0]
+                    val value = try {
+                        java.net.URLDecoder.decode(parts[1], "UTF-8")
+                    } catch (_: Exception) {
+                        parts[1]
+                    }
+                    params[key] = value
+                }
+            }
+        }
+
+        try {
+            for (name in uri.queryParameterNames) {
+                uri.getQueryParameter(name)?.let { value ->
+                    params.putIfAbsent(name, value)
+                }
+            }
+        } catch (_: Exception) {
+            // Ignore opaque URI parse failures
+        }
+
+        return params
     }
 
     /**
