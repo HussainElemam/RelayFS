@@ -1,6 +1,6 @@
 # Phase 3: 3-Way Reconciliation Engine & Conflict Resolution
 
-**Phase Status:** `PENDING`  
+**Phase Status:** `COMPLETED`  
 **Estimated Effort:** 5–7 Days  
 **Prerequisites:** [Phase 1](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) and [Phase 2](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_02_pcloud_client_and_oauth.md) complete.  
 
@@ -20,18 +20,18 @@ Implement the core mathematical heart of RelayFS:
 ## 2. Detailed Task Checklist
 
 ### Task 3.1: Fast Local Hashing (`io.relayfs.android.core.sync.hash`)
-- [ ] Implement `FastHasher`: computes `xxHash64` over file input streams with 64KB buffer chunks.
-- [ ] Add unit tests verifying known hash vectors against standard xxHash outputs.
+- [x] Implement `FastHasher`: computes `xxHash64` over file input streams with 64KB buffer chunks.
+- [x] Add unit tests verifying known hash vectors against standard xxHash outputs.
 
 ### Task 3.2: Atomic Local File Operations (`io.relayfs.android.core.sync.io`)
-- [ ] Implement `AtomicFileWriter`:
+- [x] Implement `AtomicFileWriter`:
   * Streams data into `.filename.sync_tmp`.
   * Calls `fd.sync()` to force physical disk flush.
   * Executes atomic filesystem rename over destination.
-- [ ] Add unit tests simulating write interruption and verifying target file is never left half-written.
+- [x] Add unit tests simulating write interruption and verifying target file is never left half-written.
 
 ### Task 3.3: 3-Way Reconciliation Engine (`io.relayfs.android.core.sync.engine`)
-- [ ] Implement `SyncStateCalculator`:
+- [x] Implement `SyncStateCalculator`:
   * Takes `LocalSnapshot`, `RemoteSnapshot`, and `BaselineSnapshot`.
   * Evaluates differences and returns a planned list of `SyncAction` items:
     * `UploadAction`
@@ -41,11 +41,11 @@ Implement the core mathematical heart of RelayFS:
     * `ConflictBranchAction`
     * `MoveLocalAction`
     * `MoveRemoteAction`
-- [ ] Implement `ConflictResolver`: generates formatted branch filenames and records entries in `SyncConflictEntity`.
-- [ ] Implement `SyncExecutionPipeline`: executes the planned actions sequentially with error recovery and updates the Room baseline database in a single transaction per successful file.
+- [x] Implement `ConflictResolver`: generates formatted branch filenames and records entries in `SyncConflictEntity`.
+- [x] Implement `SyncExecutionPipeline`: executes the planned actions sequentially with error recovery and updates the Room baseline database in a single transaction per successful file.
 
 ### Task 3.4: Comprehensive Unit Tests
-- [ ] Implement `ReconciliationMatrixTest` testing all 11 cases:
+- [x] Implement `ReconciliationMatrixTest` testing all 11 cases:
   * Case 1: Both unchanged $\rightarrow$ No-op.
   * Case 2: Local modified, remote unchanged $\rightarrow$ Upload.
   * Case 3: Remote modified, local unchanged $\rightarrow$ Download.

@@ -10,7 +10,7 @@ This tracker maintains the live state of implementation across all development p
 | :--- | :--- | :--- | :--- | :--- |
 | **Phase 1** | [Core Architecture & Domain Models](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) | Domain models, Room DB schema, Keystore security, CloudProvider contract | `COMPLETED` | Week 1 |
 | **Phase 2** | [pCloud Client & OAuth2 PKCE](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_02_pcloud_client_and_oauth.md) | pCloud REST API, OAuth2 PKCE, delta change detection, chunked upload | `COMPLETED` | Week 2 |
-| **Phase 3** | [3-Way Reconciliation Engine](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_03_sync_engine_core.md) | 3-way sync engine, 11-state matrix, conflict branching, atomic writes | `PENDING` | Week 3–4 |
+| **Phase 3** | [3-Way Reconciliation Engine](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_03_sync_engine_core.md) | 3-way sync engine, 11-state matrix, conflict branching, atomic writes | `COMPLETED` | Week 3–4 |
 | **Phase 4** | [Filesystem Watcher & Storage](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_04_filesystem_watcher_and_storage.md) | Recursive FileObserver (inotify), debouncing queue, Scoped Storage | `PENDING` | Week 5 |
 | **Phase 5** | [Background Sync & WorkManager](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_05_background_sync_and_workmanager.md) | WorkManager periodic sync, ForegroundService (dataSync), battery handling | `PENDING` | Week 6 |
 | **Phase 6** | [Compose UI & Obsidian Presets](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_06_ui_dashboard_and_obsidian_mode.md) | Material 3 UI, Folder pair config, Obsidian auto-detection, Conflict Center | `PENDING` | Week 7–8 |
@@ -19,10 +19,10 @@ This tracker maintains the live state of implementation across all development p
 
 ---
 
-## Active Phase: Phase 3 (3-Way Reconciliation Engine)
+## Active Phase: Phase 4 (Filesystem Watcher & Storage Permissions)
 
-> **Agent Instruction:** Phase 2 is complete. To continue implementation, instruct the agent:  
-> *"Implement Phase 3 according to docs/phases/phase_03_sync_engine_core.md"*
+> **Agent Instruction:** Phase 3 is complete. To continue implementation, instruct the agent:  
+> *"Implement Phase 4 according to docs/phases/phase_04_filesystem_watcher_and_storage.md"*
 
 ---
 
@@ -46,12 +46,12 @@ This tracker maintains the live state of implementation across all development p
 - [x] MockWebServer unit tests for all pCloud API operations
 
 ### Phase 3: 3-Way Reconciliation Engine
-- [ ] Fast local content hashing implementation (xxHash64 / SHA-1)
-- [ ] Reconciliation state engine implementing the 11-case state matrix
-- [ ] Non-destructive conflict branching mechanism
-- [ ] Atomic local file writer (`.sync_tmp` staging and rename)
-- [ ] Move and rename detection (cookie matching & persistent `fileid`)
-- [ ] Unit tests covering all 11 reconciliation states and conflict edge cases
+- [x] Fast local content hashing implementation (xxHash64 / SHA-1)
+- [x] Reconciliation state engine implementing the 11-case state matrix
+- [x] Non-destructive conflict branching mechanism
+- [x] Atomic local file writer (`.sync_tmp` staging and rename)
+- [x] Move and rename detection (cookie matching & persistent `fileid`)
+- [x] Unit tests covering all 11 reconciliation states and conflict edge cases
 
 ### Phase 4: Filesystem Watcher & Storage Permissions
 - [ ] `MANAGE_EXTERNAL_STORAGE` permission flow and system settings launcher
