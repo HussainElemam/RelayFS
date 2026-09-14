@@ -1,6 +1,6 @@
 # Product Requirements Document (PRD)
 
-## Project Name: CloudSync Android (Working Title)
+## Project Name: RelayFS
 **Document Version:** 1.0.0  
 **Status:** Approved for Implementation  
 **Target Platform:** Android 8.0+ (API Level 26+), Optimized for Android 11–15 (API Levels 30–35)  
@@ -17,7 +17,7 @@ Cloud storage services like **pCloud** offer desktop users (on Linux/Fedora, mac
 3. **Support for Offline-First Apps:** Applications like **Obsidian**, Logseq, KeePassDX, and retro emulators require synchronous POSIX filesystem access to physical files. Because pCloud lacks local folder sync, mobile users cannot keep their vaults and documents synchronized without complex, closed-source, or battery-draining workarounds.
 
 ### 1.2 Proposed Solution
-**CloudSync Android** is an open-source, privacy-first Android utility that acts as a bridge between cloud storage providers and the Android filesystem. It provides two complementary features:
+**RelayFS** is an open-source, privacy-first Android utility that acts as a bridge between cloud storage providers and the Android filesystem. It provides two complementary features:
 1. **Local Folder Synchronization Engine:** A background service that maintains continuous, two-way parity between arbitrary remote cloud folders and physical local directories on Android, equipped with 3-way reconciliation, non-destructive conflict branching, file monitoring, and specialized presets for tools like Obsidian.
 2. **Virtual Cloud Drive (`DocumentsProvider`):** An implementation of Android's Storage Access Framework that presents cloud files on-demand in the native Android file picker, complete with seekable random access for media/PDF viewers and background upload hooks when external apps save edits.
 
@@ -150,5 +150,5 @@ The system is strictly divided into:
 ## 6. Out of Scope (Initial Release)
 * **pCloud Crypto Folder Decryption:** Client-side zero-knowledge encryption requires embedding custom C/C++ crypto routines; deferred to a future crypto add-on.
 * **Interactive In-App 3-Way Text Diff Merge Tool:** The initial version will branch conflict files; interactive line-by-line diff merging is deferred to Phase 3.
-* **Direct LAN Peer-to-Peer Sync:** This is already solved by Syncthing. CloudSync Android focuses strictly on cloud storage integration.
+* **Direct LAN Peer-to-Peer Sync:** This is already solved by Syncthing. RelayFS focuses strictly on cloud storage integration.
 

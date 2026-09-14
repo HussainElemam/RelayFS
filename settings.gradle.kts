@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "android_sync_idea"
+rootProject.name = "RelayFS"
 include(":app")
  

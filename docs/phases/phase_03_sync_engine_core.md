@@ -7,7 +7,7 @@
 ---
 
 ## 1. Phase Goal
-Implement the core mathematical heart of CloudSync:
+Implement the core mathematical heart of RelayFS:
 1. Fast local file hashing using zero-dependency **xxHash64**.
 2. The 3-way reconciliation algorithm implementing the complete 11-case decision matrix.
 3. Safe atomic local file writes via staging files (`.sync_tmp` rename).
@@ -19,18 +19,18 @@ Implement the core mathematical heart of CloudSync:
 
 ## 2. Detailed Task Checklist
 
-### Task 3.1: Fast Local Hashing (`com.example.android_sync_idea.core.sync.hash`)
+### Task 3.1: Fast Local Hashing (`io.relayfs.android.core.sync.hash`)
 - [ ] Implement `FastHasher`: computes `xxHash64` over file input streams with 64KB buffer chunks.
 - [ ] Add unit tests verifying known hash vectors against standard xxHash outputs.
 
-### Task 3.2: Atomic Local File Operations (`com.example.android_sync_idea.core.sync.io`)
+### Task 3.2: Atomic Local File Operations (`io.relayfs.android.core.sync.io`)
 - [ ] Implement `AtomicFileWriter`:
   * Streams data into `.filename.sync_tmp`.
   * Calls `fd.sync()` to force physical disk flush.
   * Executes atomic filesystem rename over destination.
 - [ ] Add unit tests simulating write interruption and verifying target file is never left half-written.
 
-### Task 3.3: 3-Way Reconciliation Engine (`com.example.android_sync_idea.core.sync.engine`)
+### Task 3.3: 3-Way Reconciliation Engine (`io.relayfs.android.core.sync.engine`)
 - [ ] Implement `SyncStateCalculator`:
   * Takes `LocalSnapshot`, `RemoteSnapshot`, and `BaselineSnapshot`.
   * Evaluates differences and returns a planned list of `SyncAction` items:
@@ -72,7 +72,7 @@ Implement the core mathematical heart of CloudSync:
 
 ```bash
 # Run unit tests for sync engine and reconciliation matrix
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.core.sync.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.core.sync.*"
 ```
 
 ---

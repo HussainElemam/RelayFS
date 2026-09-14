@@ -6,7 +6,7 @@
 ---
 
 ## 1. Overview & Objective
-Android strictly regulates background process execution and network access. This specification defines how CloudSync manages background tasks using **AndroidX WorkManager** for periodic synchronization, **Foreground Services** for active/immediate sync passes, and navigation of OEM battery optimization policies.
+Android strictly regulates background process execution and network access. This specification defines how RelayFS manages background tasks using **AndroidX WorkManager** for periodic synchronization, **Foreground Services** for active/immediate sync passes, and navigation of OEM battery optimization policies.
 
 ---
 
@@ -122,7 +122,7 @@ In Android 14 (API 34+), foreground services must declare a specific `foreground
      val isIgnoring = powerManager.isIgnoringBatteryOptimizations(context.packageName)
      ```
   2. If false, display an educational card in the app settings:
-     *"To allow reliable background syncing when your screen is off, disable battery optimization for CloudSync."*
+     *"To allow reliable background syncing when your screen is off, disable battery optimization for RelayFS."*
   3. Launch system exemption intent:
      ```kotlin
      val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {

@@ -4,7 +4,7 @@
 
 ## 1. Overview & Theoretical Foundation
 
-To achieve deterministic bidirectional file synchronization between an Android device and a remote cloud repository, CloudSync Android employs a **Snapshot-Based 3-Way Reconciliation Algorithm**.
+To achieve deterministic bidirectional file synchronization between an Android device and a remote cloud repository, RelayFS employs a **Snapshot-Based 3-Way Reconciliation Algorithm**.
 
 ### 1.1 Why Simple 2-Way Comparison Fails
 If an engine only compares the **Local File ($L$)** and the **Remote File ($R$)**:

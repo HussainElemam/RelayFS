@@ -1,4 +1,4 @@
-package com.example.android_sync_idea
+package io.relayfs.android
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,17 +11,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.android_sync_idea.ui.theme.Android_sync_ideaTheme
+import io.relayfs.android.ui.theme.RelayFSTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            Android_sync_ideaTheme {
+            RelayFSTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     Greeting(
-                        name = "Android",
+                        name = "RelayFS",
                         modifier = Modifier.padding(innerPadding)
                     )
                 }
@@ -41,7 +41,7 @@ fun Greeting(name: String, modifier: Modifier = Modifier) {
 @Preview(showBackground = true)
 @Composable
 fun GreetingPreview() {
-    Android_sync_ideaTheme {
-        Greeting("Android")
+    RelayFSTheme {
+        Greeting("RelayFS")
     }
 }

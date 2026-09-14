@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.android_sync_idea"
+    namespace = "io.relayfs.android"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.example.android_sync_idea"
+        applicationId = "io.relayfs.android"
         minSdk = 24
         targetSdk = 36
         versionCode = 1

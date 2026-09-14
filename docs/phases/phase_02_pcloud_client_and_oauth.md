@@ -26,7 +26,7 @@ Build a robust, reactive HTTP client for the **pCloud REST API**:
 
 ### Task 2.2: OAuth 2.0 PKCE Flow Handler
 - [ ] Implement `OAuthPkceHelper`: generates cryptographic `code_verifier` and URL-safe SHA-256 `code_challenge`.
-- [ ] Register custom URL scheme in `AndroidManifest.xml`: `cloudsync://oauth`.
+- [ ] Register custom URL scheme in `AndroidManifest.xml`: `relayfs://oauth`.
 - [ ] Implement `OAuthCallbackActivity` to capture redirect authorization code and `locationid`.
 - [ ] Implement token exchange request and persist token into `TokenStorage`.
 
@@ -68,7 +68,7 @@ Build a robust, reactive HTTP client for the **pCloud REST API**:
 
 ```bash
 # Run unit tests for pCloud API integration
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.core.provider.pcloud.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.core.provider.pcloud.*"
 ```
 
 ---

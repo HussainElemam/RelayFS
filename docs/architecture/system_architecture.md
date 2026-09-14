@@ -4,7 +4,7 @@
 
 ## 1. Architectural Philosophy
 
-CloudSync Android follows **Clean Architecture** combined with **Agentic Engineering Best Practices**:
+RelayFS follows **Clean Architecture** combined with **Agentic Engineering Best Practices**:
 * **Dependency Rule:** Source code dependencies point inward toward domain models and business logic. The core domain layer has zero dependencies on Android UI or network frameworks.
 * **Separation of Concerns:** The network layer (`core:provider`), the database layer (`core:database`), the synchronization engine (`core:sync`), the virtual filesystem (`core:saf`), and the UI (`app`) are isolated packages/modules with explicit interface boundaries.
 * **Immutable State & Reactive Streams:** Data state is exposed through Kotlin Coroutine `Flow` and `StateFlow`. UI components react to state rather than querying imperatively.

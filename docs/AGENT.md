@@ -55,7 +55,7 @@ Run all commands from the repository root:
 ./gradlew testDebugUnitTest
 
 # Run unit tests for a specific package/class
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.sync.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.core.sync.*"
 
 # Assemble debug APK
 ./gradlew assembleDebug

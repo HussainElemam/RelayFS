@@ -19,11 +19,11 @@ Expose the user's pCloud account directly inside the native Android system file 
 
 ## 2. Detailed Task Checklist
 
-### Task 2.1: Manifest & Provider Registration (`com.example.android_sync_idea.core.saf`)
+### Task 2.1: Manifest & Provider Registration (`io.relayfs.android.core.saf`)
 - [ ] Declare `CloudDocumentsProvider` in `AndroidManifest.xml` with authority `${applicationId}.documents` and permission `MANAGE_DOCUMENTS`.
 - [ ] Implement `onCreate()` initializing database access and disk cache directories.
 
-### Task 2.2: SQLite Metadata Cache (`com.example.android_sync_idea.core.saf.cache`)
+### Task 2.2: SQLite Metadata Cache (`io.relayfs.android.core.saf.cache`)
 - [ ] Create `SafMetadataEntity.kt` and `SafMetadataDao.kt` in Room database:
   * Caches directory structures, document IDs, MIME types, sizes, and timestamps.
 - [ ] Implement `queryRoots()`: returns active cloud account roots.
@@ -70,7 +70,7 @@ Expose the user's pCloud account directly inside the native Android system file 
 
 ```bash
 # Run unit tests for DocumentsProvider
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.core.saf.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.core.saf.*"
 
 # Assemble APK for system file picker manual verification
 ./gradlew assembleDebug

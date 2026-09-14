@@ -1,4 +1,4 @@
-package com.example.android_sync_idea.ui.theme
+package io.relayfs.android.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

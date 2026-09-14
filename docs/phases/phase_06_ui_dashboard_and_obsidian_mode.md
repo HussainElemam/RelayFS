@@ -27,18 +27,18 @@ Deliver a clean, modern, ad-free **Jetpack Compose (Material 3)** user interface
 - [ ] Establish MVI / MVVM structure: ViewModels with immutable `UiState` and `UiEvent` flows.
 - [ ] Define navigation graph: `Dashboard`, `Accounts`, `FolderPairConfig`, `Conflicts`, `Settings`.
 
-### Task 2.2: Main Dashboard Screen (`com.example.android_sync_idea.ui.dashboard`)
+### Task 2.2: Main Dashboard Screen (`io.relayfs.android.ui.dashboard`)
 - [ ] Top App Bar with overall sync health status.
 - [ ] List of configured folder pairs with last-synced timestamp, sync direction badge, and quick toggle switch.
 - [ ] Interactive "Sync Now" floating action button with live spinning progress indicator.
 - [ ] Empty state illustration when no folder pairs are configured.
 
-### Task 2.3: Account Management Screen (`com.example.android_sync_idea.ui.accounts`)
+### Task 2.3: Account Management Screen (`io.relayfs.android.ui.accounts`)
 - [ ] Display connected pCloud account (email, datacenter location, quota usage).
 - [ ] "Connect pCloud Account" button launching Chrome Custom Tab OAuth flow.
 - [ ] Disconnect account button with confirmation dialog.
 
-### Task 2.4: Folder Pair Wizard with Obsidian Auto-Detection (`com.example.android_sync_idea.ui.pair`)
+### Task 2.4: Folder Pair Wizard with Obsidian Auto-Detection (`io.relayfs.android.ui.pair`)
 - [ ] Step 1: Select local folder using directory picker.
   * Check for presence of `.obsidian/`.
   * If found, display banner: *"Obsidian Vault Detected - Obsidian Mode enabled with workspace exclusions."*
@@ -46,7 +46,7 @@ Deliver a clean, modern, ad-free **Jetpack Compose (Material 3)** user interface
 - [ ] Step 3: Configure sync direction, sync interval (15m, 30m, 1h, 6h, 24h), and Wi-Fi only toggle.
 - [ ] Save configuration to `FolderPairDao` and trigger initial sync pass.
 
-### Task 2.5: Conflict Center & History Screens (`com.example.android_sync_idea.ui.conflicts`)
+### Task 2.5: Conflict Center & History Screens (`io.relayfs.android.ui.conflicts`)
 - [ ] Conflict list displaying original file vs. branched conflict file with timestamps.
 - [ ] Actions: "Keep Local", "Keep Cloud", or "Keep Both".
 - [ ] Activity log showing historical sync runs, files uploaded/downloaded, and error messages.
@@ -70,7 +70,7 @@ Deliver a clean, modern, ad-free **Jetpack Compose (Material 3)** user interface
 
 ```bash
 # Run unit and compose UI tests
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.ui.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.ui.*"
 
 # Assemble debug APK for manual on-device testing
 ./gradlew assembleDebug

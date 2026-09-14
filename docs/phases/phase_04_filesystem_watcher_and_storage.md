@@ -18,25 +18,25 @@ Enable real-time detection of local file edits:
 
 ## 2. Detailed Task Checklist
 
-### Task 2.1: Storage Permissions Manager (`com.example.android_sync_idea.core.storage`)
+### Task 2.1: Storage Permissions Manager (`io.relayfs.android.core.storage`)
 - [ ] Implement `StoragePermissionHelper`:
   * Checks if `Environment.isExternalStorageManager()` is granted (Android 11+).
   * Generates Intent for `Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION`.
   * Provides fallback launcher for `ACTION_OPEN_DOCUMENT_TREE` with `takePersistableUriPermission`.
 
-### Task 2.2: Exclusion Filter Engine (`com.example.android_sync_idea.core.watcher.filter`)
+### Task 2.2: Exclusion Filter Engine (`io.relayfs.android.core.watcher.filter`)
 - [ ] Implement `PathFilter`:
   * Evaluates paths against glob and prefix rules.
   * Rejects `.git`, `.trash`, `.sync_tmp`, `workspace.json`, `workspace-mobile.json`, `.cache`.
   * Unit tests for path filtering.
 
-### Task 2.3: Recursive `FileObserver` (`com.example.android_sync_idea.core.watcher`)
+### Task 2.3: Recursive `FileObserver` (`io.relayfs.android.core.watcher`)
 - [ ] Implement `RecursiveFileWatcher`:
   * Recursively traverses local directories and attaches `FileObserver` to all subdirectories.
   * Handles dynamic subfolder creation (`CREATE` / `MOVED_TO`) by attaching new watchers on the fly.
   * Cleans up observers when subfolders are deleted.
 
-### Task 2.4: Coroutine Debouncing Queue (`com.example.android_sync_idea.core.watcher.debounce`)
+### Task 2.4: Coroutine Debouncing Queue (`io.relayfs.android.core.watcher.debounce`)
 - [ ] Implement `DebounceEventQueue`:
   * Receives file events, filters out excluded paths.
   * Collects distinct modified relative paths in a set.
@@ -62,7 +62,7 @@ Enable real-time detection of local file edits:
 
 ```bash
 # Run unit tests for watcher and debouncing queue
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.core.watcher.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.core.watcher.*"
 ```
 
 ---

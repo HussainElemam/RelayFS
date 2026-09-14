@@ -17,14 +17,14 @@ Finalize the application for general availability:
 
 ## 2. Detailed Task Checklist
 
-### Task 2.1: Generic WebDAV Provider (`com.example.android_sync_idea.core.provider.webdav`)
+### Task 2.1: Generic WebDAV Provider (`io.relayfs.android.core.provider.webdav`)
 - [ ] Implement `WebDavProvider` implementing `CloudProvider`.
 - [ ] Build XML parser for `PROPFIND` multi-status responses using `XmlPullParser`.
 - [ ] Implement HTTP operations: `PROPFIND` (listing), `GET` (download), `PUT` (upload), `MOVE`, `DELETE`.
 - [ ] Handle HTTP Basic and Digest authentication.
 - [ ] Unit tests for WebDAV XML parsing and error status handling.
 
-### Task 2.2: In-App Markdown Diff & Conflict Resolution UI (`com.example.android_sync_idea.ui.diff`)
+### Task 2.2: In-App Markdown Diff & Conflict Resolution UI (`io.relayfs.android.ui.diff`)
 - [ ] Integrate a lightweight text diff algorithm (e.g. Myers diff).
 - [ ] Build a split-screen / unified diff viewer in Jetpack Compose showing added, removed, and modified lines between local note and branched conflict note.
 - [ ] Actions: "Accept Local", "Accept Remote", or "Merge Changes".

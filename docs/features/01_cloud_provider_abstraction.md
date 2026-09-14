@@ -13,7 +13,7 @@ The Cloud Provider Abstraction layer decouples the synchronization engine and th
 ## 2. Core Domain Models
 
 ```kotlin
-package com.example.android_sync_idea.core.model
+package io.relayfs.android.core.model
 
 import java.io.File
 
@@ -76,9 +76,9 @@ enum class ChangeType {
 ## 3. The `CloudProvider` Interface Contract
 
 ```kotlin
-package com.example.android_sync_idea.core.provider
+package io.relayfs.android.core.provider
 
-import com.example.android_sync_idea.core.model.*
+import io.relayfs.android.core.model.*
 import java.io.File
 
 interface CloudProvider {
@@ -164,10 +164,10 @@ interface CloudProvider {
 2. App computes `code_challenge = BASE64URL-ENCODE(SHA256(code_verifier))`.
 3. Opens Chrome Custom Tab to:
    ```
-   https://my.pcloud.com/oauth2/authorize?client_id={CLIENT_ID}&response_type=code&code_challenge={CHALLENGE}&code_challenge_method=S256&redirect_uri=cloudsync://oauth
+   https://my.pcloud.com/oauth2/authorize?client_id={CLIENT_ID}&response_type=code&code_challenge={CHALLENGE}&code_challenge_method=S256&redirect_uri=relayfs://oauth
    ```
 4. User logs in (supports 2FA, Google/Apple sign-in).
-5. pCloud redirects to `cloudsync://oauth?code={AUTH_CODE}&locationid={1 or 2}`.
+5. pCloud redirects to `relayfs://oauth?code={AUTH_CODE}&locationid={1 or 2}`.
 6. App captures intent and exchanges `code` + `code_verifier` for `access_token` at:
    * US: `https://api.pcloud.com/oauth2_token`
    * EU: `https://eapi.pcloud.com/oauth2_token`

@@ -24,14 +24,14 @@ Establish the foundational Clean Architecture layers for the application:
 - [ ] Add Kotlin Coroutines & Flow testing libraries (`org.jetbrains.kotlinx:kotlinx-coroutines-test`).
 - [ ] Enable Room KSP plugin if not already present.
 
-### Task 1.2: Core Domain Models (`com.example.android_sync_idea.core.model`)
+### Task 1.2: Core Domain Models (`io.relayfs.android.core.model`)
 - [ ] `CloudAccount.kt`: Represents a connected cloud user.
 - [ ] `CloudItem.kt`: Normalized remote file/folder metadata.
 - [ ] `SyncPair.kt`: Domain representation of a configured sync pair.
 - [ ] `SyncConflict.kt`: Represents an active or resolved file conflict.
 - [ ] `SyncResult.kt`: Summary of a completed sync pass (files transferred, errors, elapsed time).
 
-### Task 1.3: Room SQLite Database (`com.example.android_sync_idea.core.database`)
+### Task 1.3: Room SQLite Database (`io.relayfs.android.core.database`)
 - [ ] `FolderPairEntity.kt`: Storage table for configured folder pairs.
 - [ ] `SyncBaselineEntity.kt`: Storage table for the 3-way sync baseline snapshots.
 - [ ] `SyncConflictEntity.kt`: Storage table for conflict branches.
@@ -40,11 +40,11 @@ Establish the foundational Clean Architecture layers for the application:
 - [ ] `SyncBaselineDao.kt`: Fast bulk lookup, upsert, and deletion for baseline snapshots.
 - [ ] `AppDatabase.kt`: Main RoomDatabase declaration with database builder.
 
-### Task 1.4: Keystore Token Storage (`com.example.android_sync_idea.core.security`)
+### Task 1.4: Keystore Token Storage (`io.relayfs.android.core.security`)
 - [ ] `TokenStorage.kt`: Interface and implementation using `EncryptedSharedPreferences` with `MasterKey.DEFAULT_MASTER_KEY_ALIAS`.
 - [ ] Secure methods: `saveToken(accountId, token)`, `getToken(accountId)`, `deleteToken(accountId)`.
 
-### Task 1.5: `CloudProvider` Interface Definition (`com.example.android_sync_idea.core.provider`)
+### Task 1.5: `CloudProvider` Interface Definition (`io.relayfs.android.core.provider`)
 - [ ] Create `CloudProvider.kt` with all methods specified in `docs/features/01_cloud_provider_abstraction.md`.
 
 ---
@@ -65,8 +65,8 @@ Establish the foundational Clean Architecture layers for the application:
 
 ```bash
 # Verify compilation and run unit tests for database and security
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.core.database.*"
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.core.security.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.core.database.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.core.security.*"
 
 # Verify entire project compiles cleanly
 ./gradlew assembleDebug

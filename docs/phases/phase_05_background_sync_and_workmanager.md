@@ -18,7 +18,7 @@ Ensure reliable, battery-efficient background synchronization:
 
 ## 2. Detailed Task Checklist
 
-### Task 2.1: WorkManager Worker (`com.example.android_sync_idea.core.work`)
+### Task 2.1: WorkManager Worker (`io.relayfs.android.core.work`)
 - [ ] Add `androidx.work:work-runtime-ktx:2.9.1`.
 - [ ] Implement `SyncWorker`:
   * Extends `CoroutineWorker`.
@@ -26,20 +26,20 @@ Ensure reliable, battery-efficient background synchronization:
   * Executes full reconciliation pass via `SyncExecutionPipeline`.
   * Handles retry logic on network failure with exponential backoff.
 
-### Task 2.2: Sync Scheduler (`com.example.android_sync_idea.core.work.scheduler`)
+### Task 2.2: Sync Scheduler (`io.relayfs.android.core.work.scheduler`)
 - [ ] Implement `SyncScheduler`:
   * `schedulePeriodicSync(folderPair)`: Enqueues unique periodic work.
   * `triggerImmediateSync(folderPairId)`: Enqueues expedited one-time work.
   * `cancelSync(folderPairId)`: Cancels scheduled work.
 
-### Task 2.3: Foreground Service & Notifications (`com.example.android_sync_idea.core.service`)
+### Task 2.3: Foreground Service & Notifications (`io.relayfs.android.core.service`)
 - [ ] Declare `SyncForegroundService` in `AndroidManifest.xml` with `dataSync` type.
 - [ ] Implement `SyncNotificationManager`:
   * Creates low-priority notification channel `sync_status`.
   * Builds and updates notifications with current file name, progress bar, and transfer speed.
   * Handles conflict alert notifications (`sync_alerts` channel).
 
-### Task 2.4: Battery Optimization Exemption (`com.example.android_sync_idea.core.power`)
+### Task 2.4: Battery Optimization Exemption (`io.relayfs.android.core.power`)
 - [ ] Implement `PowerManagementHelper`:
   * Checks `PowerManager.isIgnoringBatteryOptimizations()`.
   * Constructs system intent for `Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
@@ -63,7 +63,7 @@ Ensure reliable, battery-efficient background synchronization:
 
 ```bash
 # Run unit tests for WorkManager and scheduling
-./gradlew testDebugUnitTest --tests "com.example.android_sync_idea.core.work.*"
+./gradlew testDebugUnitTest --tests "io.relayfs.android.core.work.*"
 ```
 
 ---

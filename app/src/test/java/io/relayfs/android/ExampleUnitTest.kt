@@ -1,4 +1,4 @@
-package com.example.android_sync_idea
+package io.relayfs.android
 
 import org.junit.Test
 
