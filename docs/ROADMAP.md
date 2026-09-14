@@ -9,7 +9,7 @@ This tracker maintains the live state of implementation across all development p
 | Phase | Title | Focus Area | Status | Target Completion |
 | :--- | :--- | :--- | :--- | :--- |
 | **Phase 1** | [Core Architecture & Domain Models](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) | Domain models, Room DB schema, Keystore security, CloudProvider contract | `COMPLETED` | Week 1 |
-| **Phase 2** | [pCloud Client & OAuth2 PKCE](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_02_pcloud_client_and_oauth.md) | pCloud REST API, OAuth2 PKCE, delta change detection, chunked upload | `PENDING` | Week 2 |
+| **Phase 2** | [pCloud Client & OAuth2 PKCE](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_02_pcloud_client_and_oauth.md) | pCloud REST API, OAuth2 PKCE, delta change detection, chunked upload | `COMPLETED` | Week 2 |
 | **Phase 3** | [3-Way Reconciliation Engine](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_03_sync_engine_core.md) | 3-way sync engine, 11-state matrix, conflict branching, atomic writes | `PENDING` | Week 3–4 |
 | **Phase 4** | [Filesystem Watcher & Storage](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_04_filesystem_watcher_and_storage.md) | Recursive FileObserver (inotify), debouncing queue, Scoped Storage | `PENDING` | Week 5 |
 | **Phase 5** | [Background Sync & WorkManager](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_05_background_sync_and_workmanager.md) | WorkManager periodic sync, ForegroundService (dataSync), battery handling | `PENDING` | Week 6 |
@@ -19,10 +19,10 @@ This tracker maintains the live state of implementation across all development p
 
 ---
 
-## Active Phase: Phase 2 (pCloud Client & OAuth2 PKCE)
+## Active Phase: Phase 3 (3-Way Reconciliation Engine)
 
-> **Agent Instruction:** Phase 1 is complete. To continue implementation, instruct the agent:  
-> *"Implement Phase 2 according to docs/phases/phase_02_pcloud_client_and_oauth.md"*
+> **Agent Instruction:** Phase 2 is complete. To continue implementation, instruct the agent:  
+> *"Implement Phase 3 according to docs/phases/phase_03_sync_engine_core.md"*
 
 ---
 
@@ -37,13 +37,13 @@ This tracker maintains the live state of implementation across all development p
 - [x] Unit tests for database migrations and DAOs passing
 
 ### Phase 2: pCloud Client & OAuth2 PKCE
-- [ ] pCloud API models (JSON serialization for `listfolder`, `diff`, `upload`)
-- [ ] Retrofit / OkHttp client with OAuth Bearer interceptor
-- [ ] OAuth2 PKCE flow handler with Chrome Custom Tabs and redirect intent
-- [ ] Datacenter auto-routing (US `api.pcloud.com` vs. EU `eapi.pcloud.com`)
-- [ ] Delta sync parser (`diff` endpoint with `diffid` pagination)
-- [ ] Chunked upload implementation (`upload_create`, `upload_write`, `upload_save`)
-- [ ] MockWebServer unit tests for all pCloud API operations
+- [x] pCloud API models (JSON serialization for `listfolder`, `diff`, `upload`)
+- [x] Retrofit / OkHttp client with OAuth Bearer interceptor
+- [x] OAuth2 PKCE flow handler with Chrome Custom Tabs and redirect intent
+- [x] Datacenter auto-routing (US `api.pcloud.com` vs. EU `eapi.pcloud.com`)
+- [x] Delta sync parser (`diff` endpoint with `diffid` pagination)
+- [x] Chunked upload implementation (`upload_create`, `upload_write`, `upload_save`)
+- [x] MockWebServer unit tests for all pCloud API operations
 
 ### Phase 3: 3-Way Reconciliation Engine
 - [ ] Fast local content hashing implementation (xxHash64 / SHA-1)

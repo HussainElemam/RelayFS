@@ -1,6 +1,6 @@
 # Phase 2: pCloud Client & OAuth2 PKCE Integration
 
-**Phase Status:** `PENDING`  
+**Phase Status:** `COMPLETED`  
 **Estimated Effort:** 4–6 Days  
 **Prerequisites:** [Phase 1: Core Architecture & Domain Models](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) complete.  
 
@@ -20,19 +20,19 @@ Build a robust, reactive HTTP client for the **pCloud REST API**:
 ## 2. Detailed Task Checklist
 
 ### Task 2.1: Network Dependencies & Setup
-- [ ] Add OkHttp 4.x and Retrofit 2.x (or Ktor Client) with Kotlinx Serialization.
-- [ ] Add `MockWebServer` for offline HTTP unit testing.
-- [ ] Add AndroidX Browser (`androidx.browser:browser:1.8.0`) for Chrome Custom Tabs.
+- [x] Add OkHttp 4.x and Retrofit 2.x (or Ktor Client) with Kotlinx Serialization.
+- [x] Add `MockWebServer` for offline HTTP unit testing.
+- [x] Add AndroidX Browser (`androidx.browser:browser:1.8.0`) for Chrome Custom Tabs.
 
 ### Task 2.2: OAuth 2.0 PKCE Flow Handler
-- [ ] Implement `OAuthPkceHelper`: generates cryptographic `code_verifier` and URL-safe SHA-256 `code_challenge`.
-- [ ] Register custom URL scheme in `AndroidManifest.xml`: `relayfs://oauth`.
-- [ ] Implement `OAuthCallbackActivity` to capture redirect authorization code and `locationid`.
-- [ ] Implement token exchange request and persist token into `TokenStorage`.
+- [x] Implement `OAuthPkceHelper`: generates cryptographic `code_verifier` and URL-safe SHA-256 `code_challenge`.
+- [x] Register custom URL scheme in `AndroidManifest.xml`: `relayfs://oauth`.
+- [x] Implement `OAuthCallbackActivity` to capture redirect authorization code and `locationid`.
+- [x] Implement token exchange request and persist token into `TokenStorage`.
 
 ### Task 2.3: pCloud REST API Service & DTOs
-- [ ] Create DTOs: `PCloudFolderResponse`, `PCloudFileMetadata`, `PCloudDiffResponse`, `PCloudUploadResponse`.
-- [ ] Implement Retrofit interface or OkHttp client for pCloud endpoints:
+- [x] Create DTOs: `PCloudFolderResponse`, `PCloudFileMetadata`, `PCloudDiffResponse`, `PCloudUploadResponse`.
+- [x] Implement Retrofit interface or OkHttp client for pCloud endpoints:
   * `GET /listfolder` (with `recursive=1`)
   * `GET /diff` (with `diffid` tracking)
   * `GET /getfilelink` (download stream extraction)
@@ -41,15 +41,15 @@ Build a robust, reactive HTTP client for the **pCloud REST API**:
   * `POST /movefile` and `POST /deletefile`
 
 ### Task 2.4: `PCloudProvider` Implementation
-- [ ] Implement `PCloudProvider` implementing the `CloudProvider` interface from Phase 1.
-- [ ] Add OkHttp Interceptors:
+- [x] Implement `PCloudProvider` implementing the `CloudProvider` interface from Phase 1.
+- [x] Add OkHttp Interceptors:
   * `AuthInterceptor`: Injects `access_token` query parameter or Bearer header.
   * `RateLimitInterceptor`: Handles HTTP 429 with exponential backoff.
   * `LoggingInterceptor`: Redacts sensitive tokens.
 
 ### Task 2.5: Automated Network Unit Tests
-- [ ] Test OAuth PKCE challenge calculation.
-- [ ] Test `MockWebServer` responses for:
+- [x] Test OAuth PKCE challenge calculation.
+- [x] Test `MockWebServer` responses for:
   * Recursive folder listing parsing.
   * `diff` event parsing (`createfile`, `modifyfile`, `deletefile`).
   * Chunked upload progression and retry on dropped socket.
