@@ -15,19 +15,20 @@ sealed class Screen(
     val title: String,
     val icon: ImageVector? = null
 ) {
-    object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
-    object Accounts : Screen("accounts", "Accounts", Icons.Default.AccountCircle)
-    object Conflicts : Screen("conflicts", "Conflicts", Icons.Default.Warning)
-    object Logs : Screen("logs", "Activity", Icons.Default.History)
-    object FolderPairWizard : Screen("pair_wizard", "New Folder Pair")
+    data object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
+    data object Accounts : Screen("accounts", "Accounts", Icons.Default.AccountCircle)
+    data object Conflicts : Screen("conflicts", "Conflicts", Icons.Default.Warning)
+    data object Logs : Screen("logs", "Activity", Icons.Default.History)
+    data object FolderPairWizard : Screen("pair_wizard", "New Folder Pair")
 
     companion object {
-        val bottomNavItems = listOf(
-            Dashboard,
-            Conflicts,
-            Logs,
-            Accounts
-        )
+        val bottomNavItems: List<Screen>
+            get() = listOf(
+                Dashboard,
+                Conflicts,
+                Logs,
+                Accounts
+            )
     }
 }
 

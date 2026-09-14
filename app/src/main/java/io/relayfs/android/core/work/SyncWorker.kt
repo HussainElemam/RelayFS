@@ -52,8 +52,6 @@ class SyncWorker(
         }
 
         val database = customDatabase ?: AppDatabase.build(applicationContext)
-        val tokenStorage = EncryptedSharedPrefsTokenStorage(applicationContext)
-        val providerFactory = customCloudProviderFactory ?: DefaultCloudProviderFactory(tokenStorage)
         val providerFactory = customCloudProviderFactory ?: DefaultCloudProviderFactory(
             EncryptedSharedPrefsTokenStorage(applicationContext)
         )
