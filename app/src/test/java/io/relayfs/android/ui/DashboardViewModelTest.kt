@@ -98,5 +98,11 @@ class DashboardViewModelTest {
         viewModel.dismissBatteryBanner()
         assertFalse(viewModel.uiState.value.showBatteryOptimizationBanner)
     }
+
+    @Test
+    fun testEmptyStateOverallHealthIsNotConfigured() {
+        assertEquals(SyncHealth.NOT_CONFIGURED, viewModel.uiState.value.overallHealth)
+        assertTrue(viewModel.uiState.value.folderPairs.isEmpty())
+    }
 }
 

@@ -25,5 +25,15 @@ interface TokenStorage {
      * Checks if a token exists for a cloud account.
      */
     suspend fun hasToken(accountId: String): Boolean
+
+    /**
+     * Stores the API endpoint or base URL associated with a cloud account (e.g. EU vs US datacenter).
+     */
+    suspend fun saveEndpoint(accountId: String, endpoint: String) {}
+
+    /**
+     * Retrieves the stored API endpoint or base URL for a cloud account, or null if none is set.
+     */
+    suspend fun getEndpoint(accountId: String): String? = null
 }
 

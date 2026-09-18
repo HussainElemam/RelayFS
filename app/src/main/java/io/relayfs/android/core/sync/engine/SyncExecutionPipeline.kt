@@ -39,6 +39,7 @@ class SyncExecutionPipeline(
         val baselineDao = database.syncBaselineDao()
         val conflictDao = database.syncConflictDao()
         val folderPairDao = database.folderPairDao()
+        val folderCache = mutableMapOf<String, String>()
 
         for (action in plannedActions) {
             try {
@@ -49,8 +50,14 @@ class SyncExecutionPipeline(
 
                     is SyncAction.Upload -> {
                         val file = action.localItem.localFile
+                        val relDir = action.relativePath.substringBeforeLast('/', "")
+                        val targetParentId = resolveOrCreateRemoteDirectory(
+                            rootFolderId = remoteFolderId,
+                            relativeDir = relDir,
+                            folderCache = folderCache
+                        )
                         val uploadResult = cloudProvider.uploadFile(
-                            parentFolderId = action.parentFolderId,
+                            parentFolderId = targetParentId,
                             file = file,
                             remoteName = file.name
                         )
@@ -81,6 +88,7 @@ class SyncExecutionPipeline(
 
                     is SyncAction.Download -> {
                         val destFile = action.destinationFile
+                        destFile.parentFile?.mkdirs()
                         val downloadResult = cloudProvider.downloadFile(
                             remoteId = action.remoteItem.remoteId,
                             destinationFile = destFile
@@ -153,6 +161,7 @@ class SyncExecutionPipeline(
                     }
 
                     is SyncAction.ConflictBranch -> {
+                        action.conflictFileDestination.parentFile?.mkdirs()
                         // Keep local intact; download remote copy to branched sibling
                         val downloadResult = cloudProvider.downloadFile(
                             remoteId = action.remoteItem.remoteId,
@@ -175,7 +184,7 @@ class SyncExecutionPipeline(
                             conflictDao.insert(conflictRecord.toEntity())
 
                             // Track the branched file in the baseline
-                            val branchRelPath = action.conflictFileDestination.relativeTo(localRoot).path
+                            val branchRelPath = action.conflictFileDestination.relativeTo(localRoot).path.replace('\\', '/')
                             baselineDao.upsert(
                                 SyncBaselineEntity(
                                     folderPairId = folderPairId,
@@ -199,8 +208,14 @@ class SyncExecutionPipeline(
 
                     is SyncAction.ConflictPreserveLocal -> {
                         val file = action.localItem.localFile
+                        val relDir = action.relativePath.substringBeforeLast('/', "")
+                        val targetParentId = resolveOrCreateRemoteDirectory(
+                            rootFolderId = remoteFolderId,
+                            relativeDir = relDir,
+                            folderCache = folderCache
+                        )
                         val uploadResult = cloudProvider.uploadFile(
-                            parentFolderId = action.parentFolderId,
+                            parentFolderId = targetParentId,
                             file = file,
                             remoteName = file.name
                         )
@@ -227,6 +242,7 @@ class SyncExecutionPipeline(
 
                     is SyncAction.ConflictPreserveRemote -> {
                         val destFile = action.destinationFile
+                        destFile.parentFile?.mkdirs()
                         val downloadResult = cloudProvider.downloadFile(
                             remoteId = action.remoteItem.remoteId,
                             destinationFile = destFile
@@ -281,5 +297,44 @@ class SyncExecutionPipeline(
             bytesTransferred = bytesTransferred,
             errorMessages = errorMessages
         )
+    }
+
+    private suspend fun resolveOrCreateRemoteDirectory(
+        rootFolderId: String,
+        relativeDir: String,
+        folderCache: MutableMap<String, String>
+    ): String {
+        if (relativeDir.isBlank()) return rootFolderId
+        folderCache[relativeDir]?.let { return it }
+
+        val segments = relativeDir.split('/').filter { it.isNotBlank() }
+        var currentParentId = rootFolderId
+        var currentPath = ""
+
+        for (segment in segments) {
+            currentPath = if (currentPath.isEmpty()) segment else "$currentPath/$segment"
+            val cached = folderCache[currentPath]
+            if (cached != null) {
+                currentParentId = cached
+            } else {
+                val createResult = cloudProvider.createFolder(currentParentId, segment)
+                if (createResult.isSuccess) {
+                    currentParentId = createResult.getOrThrow().id
+                    folderCache[currentPath] = currentParentId
+                } else {
+                    val listResult = cloudProvider.listFolder(currentParentId, recursive = false)
+                    val existing = listResult.getOrNull()?.firstOrNull { it.isDirectory && it.name == segment }
+                    if (existing != null) {
+                        currentParentId = existing.id
+                        folderCache[currentPath] = currentParentId
+                    } else {
+                        // In WebDAV or single-tier providers where folders are represented by path
+                        currentParentId = if (currentParentId.endsWith("/")) "$currentParentId$segment" else "$currentParentId/$segment"
+                        folderCache[currentPath] = currentParentId
+                    }
+                }
+            }
+        }
+        return currentParentId
     }
 }

@@ -28,20 +28,24 @@ object StoragePermissionHelper {
      * On Android 10 and lower, checks READ_EXTERNAL_STORAGE and WRITE_EXTERNAL_STORAGE.
      */
     fun hasAllFilesAccess(context: Context): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            val readGranted = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.READ_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Environment.isExternalStorageManager()
+            } else {
+                val readGranted = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
 
-            val writeGranted = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.WRITE_EXTERNAL_STORAGE
-            ) == PackageManager.PERMISSION_GRANTED
+                val writeGranted = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
 
-            readGranted && writeGranted
+                readGranted && writeGranted
+            }
+        } catch (t: Throwable) {
+            false
         }
     }
 
@@ -103,6 +107,30 @@ object StoragePermissionHelper {
     fun hasPersistedUriPermission(contentResolver: ContentResolver, treeUri: Uri): Boolean {
         return contentResolver.persistedUriPermissions.any { perm ->
             perm.uri == treeUri && perm.isReadPermission && perm.isWritePermission
+        }
+    }
+
+    /**
+     * Resolves a Storage Access Framework tree Uri to a local filesystem path if possible.
+     * Supports standard primary external storage as well as secondary storage volumes.
+     */
+    fun resolveTreeUriToPath(treeUri: Uri): String? {
+        return try {
+            val docId = DocumentsContract.getTreeDocumentId(treeUri) ?: return null
+            if (docId.startsWith("primary:")) {
+                val relPath = docId.removePrefix("primary:")
+                java.io.File(Environment.getExternalStorageDirectory(), relPath).absolutePath
+            } else if (docId.contains(":")) {
+                val parts = docId.split(":", limit = 2)
+                val volumeId = parts[0]
+                val relPath = parts[1]
+                val file = java.io.File("/storage/$volumeId", relPath)
+                file.absolutePath
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            null
         }
     }
 }

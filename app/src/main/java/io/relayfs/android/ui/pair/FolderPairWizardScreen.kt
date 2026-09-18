@@ -35,15 +35,28 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.os.Environment
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import io.relayfs.android.core.model.SyncDirection
+import io.relayfs.android.core.storage.StoragePermissionHelper
 import io.relayfs.android.ui.theme.RelayFSTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -164,6 +177,46 @@ fun StepOneLocalFolder(
     onPathChanged: (String) -> Unit,
     onNext: () -> Unit
 ) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var hasStoragePermission by remember {
+        mutableStateOf(StoragePermissionHelper.hasAllFilesAccess(context))
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasStoragePermission = StoragePermissionHelper.hasAllFilesAccess(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) {
+        hasStoragePermission = StoragePermissionHelper.hasAllFilesAccess(context)
+    }
+
+    val openDocumentTreeLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let {
+            try {
+                StoragePermissionHelper.takePersistablePermissions(context.contentResolver, it)
+            } catch (e: Exception) {
+                // Ignore failure to persist permissions
+            }
+            val resolvedPath = StoragePermissionHelper.resolveTreeUriToPath(it) ?: it.toString()
+            onPathChanged(resolvedPath)
+        }
+    }
+
+    val externalStoragePath = Environment.getExternalStorageDirectory().absolutePath
+
     Text(
         text = "Select Local Directory",
         style = MaterialTheme.typography.titleLarge,
@@ -174,6 +227,48 @@ fun StepOneLocalFolder(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
+
+    if (!hasStoragePermission) {
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("storage_permission_card")
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Storage Permission Required",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "RelayFS requires All Files Access permission to read and sync your local directory in real time.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        val intent = StoragePermissionHelper.createAllFilesAccessIntent(context)
+                        permissionLauncher.launch(intent)
+                    },
+                    modifier = Modifier.testTag("btn_grant_storage_permission")
+                ) {
+                    Text("Grant Storage Permission")
+                }
+            }
+        }
+    }
 
     OutlinedTextField(
         value = localPath,
@@ -187,16 +282,28 @@ fun StepOneLocalFolder(
             .testTag("input_local_path")
     )
 
-    // Quick presets
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // Quick presets and Browse button
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedButton(
+            onClick = { openDocumentTreeLauncher.launch(null) },
+            modifier = Modifier.testTag("btn_browse_folder")
+        ) {
+            Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("Browse")
+        }
         FilterChip(
             selected = false,
-            onClick = { onPathChanged("/sdcard/Documents/Obsidian") },
+            onClick = { onPathChanged("$externalStoragePath/Documents/Obsidian") },
             label = { Text("Documents/Obsidian") }
         )
         FilterChip(
             selected = false,
-            onClick = { onPathChanged("/sdcard/Documents/Notes") },
+            onClick = { onPathChanged("$externalStoragePath/Documents/Notes") },
             label = { Text("Documents/Notes") }
         )
     }

@@ -187,6 +187,29 @@ class SyncExecutionPipelineTest {
         val folderPair = database.folderPairDao().getById(folderPairId)
         assertEquals(SyncStatus.SUCCESS, folderPair?.lastSyncStatus)
     }
+
+    @Test
+    fun testExecuteNestedUploadCreatesRemoteDirectories() = runTest {
+        val subDir = File(tempFolder.root, "Personal/Work").apply { mkdirs() }
+        val nestedFile = File(subDir, "note.md").apply { writeText("Nested note") }
+
+        val action = SyncAction.Upload(
+            relativePath = "Personal/Work/note.md",
+            localItem = LocalItemSnapshot("Personal/Work/note.md", nestedFile, nestedFile.length(), nestedFile.lastModified(), "h"),
+            parentFolderId = "d0"
+        )
+
+        val result = pipeline.execute(folderPairId, tempFolder.root, "d0", listOf(action))
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.uploadedCount)
+        assertTrue(fakeCloud.createdFolders.contains("Personal"))
+        assertTrue(fakeCloud.createdFolders.contains("Work"))
+        val target = fakeCloud.uploadTargets.firstOrNull()
+        assertNotNull(target)
+        assertEquals("note.md", target?.second)
+        assertEquals("d_d_d0_Personal_Work", target?.first)
+    }
 }
 
 /**
@@ -197,6 +220,8 @@ private class FakeCloudProvider : CloudProvider {
     override val accountId = "fake-acc"
 
     val uploadedFiles = mutableListOf<String>()
+    val uploadTargets = mutableListOf<Pair<String, String>>()
+    val createdFolders = mutableListOf<String>()
     val filesToDownload = mutableMapOf<String, String>()
     val deletedRemoteIds = mutableListOf<String>()
 
@@ -226,12 +251,20 @@ private class FakeCloudProvider : CloudProvider {
         progress: ((Long, Long) -> Unit)?
     ): Result<CloudItem> {
         uploadedFiles.add(file.name)
+        uploadTargets.add(parentFolderId to remoteName)
         return Result.success(
             CloudItem("f_${file.name}", parentFolderId, remoteName, "/$remoteName", false, file.length(), file.lastModified())
         )
     }
 
-    override suspend fun createFolder(parentFolderId: String, folderName: String) = Result.failure<CloudItem>(UnsupportedOperationException())
+    override suspend fun createFolder(parentFolderId: String, folderName: String): Result<CloudItem> {
+        val folderId = "d_${parentFolderId}_$folderName"
+        createdFolders.add(folderName)
+        return Result.success(
+            CloudItem(folderId, parentFolderId, folderName, "/$folderName", true, 0L, System.currentTimeMillis())
+        )
+    }
+
     override suspend fun moveItem(remoteId: String, newParentFolderId: String, newName: String) = Result.failure<CloudItem>(UnsupportedOperationException())
 
     override suspend fun deleteItem(remoteId: String, isDirectory: Boolean): Result<Unit> {

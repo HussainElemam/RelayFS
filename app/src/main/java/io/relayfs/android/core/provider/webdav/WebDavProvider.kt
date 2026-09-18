@@ -206,11 +206,8 @@ class WebDavProvider(
                 }
             }
 
-            if (destinationFile.exists()) destinationFile.delete()
-            if (!stagingFile.renameTo(destinationFile)) {
-                stagingFile.copyTo(destinationFile, overwrite = true)
-                stagingFile.delete()
-            }
+            // Safe atomic file replacement with backup
+            io.relayfs.android.core.sync.io.AtomicFileWriter.safeReplace(stagingFile, destinationFile)
         }
     }
 

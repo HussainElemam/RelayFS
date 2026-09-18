@@ -233,7 +233,26 @@ class CloudDocumentsProvider : DocumentsProvider() {
         val stagingDir = File(safCacheDir, "staging").apply { mkdirs() }
         val stagingFile = File(stagingDir, "${documentId}_${System.currentTimeMillis()}.tmp")
 
-        if (cachedFile.exists()) {
+        // If file exists on cloud but is not yet in read cache, download it first so edits/appends don't truncate existing data
+        if (!cachedFile.exists() || cachedFile.length() == 0L) {
+            val hasRemoteContent = entity != null && (entity.sizeBytes ?: 0L) > 0L
+            if (hasRemoteContent) {
+                signal?.throwIfCanceled()
+                val provider = runBlocking(Dispatchers.IO) {
+                    providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)
+                }
+                if (provider != null) {
+                    runCatching {
+                        runBlocking(Dispatchers.IO) {
+                            provider.downloadFile(documentId, cachedFile)
+                        }
+                    }
+                }
+                signal?.throwIfCanceled()
+            }
+        }
+
+        if (cachedFile.exists() && cachedFile.length() > 0L) {
             cachedFile.copyTo(stagingFile, overwrite = true)
         } else {
             stagingFile.createNewFile()

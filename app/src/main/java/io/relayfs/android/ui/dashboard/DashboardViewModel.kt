@@ -22,13 +22,14 @@ enum class SyncHealth {
     HEALTHY,
     SYNCING,
     HAS_CONFLICTS,
-    ERROR
+    ERROR,
+    NOT_CONFIGURED
 }
 
 data class DashboardUiState(
     val folderPairs: List<FolderPairEntity> = emptyList(),
     val isSyncing: Boolean = false,
-    val overallHealth: SyncHealth = SyncHealth.HEALTHY,
+    val overallHealth: SyncHealth = SyncHealth.NOT_CONFIGURED,
     val showBatteryOptimizationBanner: Boolean = false,
     val statusMessage: String? = null
 )
@@ -54,10 +55,19 @@ class DashboardViewModel(
     init {
         pairsCollectorJob = viewModelScope.launch(ioDispatcher) {
             try {
-                database.folderPairDao().getAllFlow().collect { pairs ->
+                kotlinx.coroutines.flow.combine(
+                    database.folderPairDao().getAllFlow(),
+                    database.syncConflictDao().getAllActiveConflictsFlow()
+                ) { pairs, conflicts ->
+                    pairs to conflicts
+                }.collect { (pairs, conflicts) ->
                     _uiState.update { current ->
-                        val hasErrors = pairs.any { it.lastSyncStatus == SyncStatus.ERROR }
-                        val health = if (hasErrors) SyncHealth.ERROR else SyncHealth.HEALTHY
+                        val health = when {
+                            pairs.isEmpty() -> SyncHealth.NOT_CONFIGURED
+                            pairs.any { it.lastSyncStatus == SyncStatus.ERROR } -> SyncHealth.ERROR
+                            conflicts.isNotEmpty() -> SyncHealth.HAS_CONFLICTS
+                            else -> SyncHealth.HEALTHY
+                        }
                         current.copy(
                             folderPairs = pairs,
                             overallHealth = health
@@ -86,8 +96,13 @@ class DashboardViewModel(
                 }
             }
             // Give WorkManager time to dispatch
-            kotlinx.coroutines.delay(1500)
-            _uiState.update { it.copy(isSyncing = false, overallHealth = SyncHealth.HEALTHY) }
+            val currentPairs = _uiState.value.folderPairs
+            val endHealth = when {
+                currentPairs.isEmpty() -> SyncHealth.NOT_CONFIGURED
+                currentPairs.any { it.lastSyncStatus == SyncStatus.ERROR } -> SyncHealth.ERROR
+                else -> SyncHealth.HEALTHY
+            }
+            _uiState.update { it.copy(isSyncing = false, overallHealth = endHealth) }
         }
     }
 

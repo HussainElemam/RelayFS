@@ -58,9 +58,10 @@ class AccountsViewModel(
                 return@launch
             }
 
+            val endpoint = tokenStorage.getEndpoint(DEFAULT_ACCOUNT_ID) ?: PCloudApiClient.US_API_URL
             try {
                 val client = PCloudApiClient(
-                    baseUrl = PCloudApiClient.US_API_URL,
+                    baseUrl = endpoint,
                     tokenProvider = { runBlocking { tokenStorage.getToken(DEFAULT_ACCOUNT_ID) } }
                 )
                 val response = client.apiService.getUserInfo()
@@ -77,14 +78,20 @@ class AccountsViewModel(
                         )
                     }
                 } else {
-                    _uiState.update { it.copy(isConnected = true, isLoading = false) }
+                    _uiState.update {
+                        it.copy(
+                            isConnected = false,
+                            isLoading = false,
+                            errorMessage = "Failed to load account: ${body?.error ?: response.message()}"
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
-                        isConnected = true,
+                        isConnected = false,
                         isLoading = false,
-                        errorMessage = "Connected (offline: ${e.message})"
+                        errorMessage = "Account connection error: ${e.message}"
                     )
                 }
             }
@@ -100,7 +107,9 @@ class AccountsViewModel(
                     // Token flow (implicit): token received directly in redirect fragment
                     val token = callbackData.accessToken
                     if (!token.isNullOrBlank()) {
+                        val endpoint = PCloudApiClient.getBaseUrlForLocation(callbackData.locationId)
                         tokenStorage.saveToken(DEFAULT_ACCOUNT_ID, token)
+                        tokenStorage.saveEndpoint(DEFAULT_ACCOUNT_ID, endpoint)
                         loadAccount()
                         return@collect
                     }
@@ -109,11 +118,7 @@ class AccountsViewModel(
                     val authCode = callbackData.authCode
                     if (!authCode.isNullOrBlank()) {
                         val verifier = pendingCodeVerifier ?: ""
-                        val baseUrl = if (callbackData.locationId == 2) {
-                            PCloudApiClient.EU_API_URL
-                        } else {
-                            PCloudApiClient.US_API_URL
-                        }
+                        val baseUrl = PCloudApiClient.getBaseUrlForLocation(callbackData.locationId)
 
                         val client = PCloudApiClient(
                             baseUrl = baseUrl,
@@ -129,6 +134,7 @@ class AccountsViewModel(
                         val body = response.body()
                         if (response.isSuccessful && body != null && body.result == 0) {
                             tokenStorage.saveToken(DEFAULT_ACCOUNT_ID, body.accessToken)
+                            tokenStorage.saveEndpoint(DEFAULT_ACCOUNT_ID, baseUrl)
                             pendingCodeVerifier = null
                             loadAccount()
                         } else {

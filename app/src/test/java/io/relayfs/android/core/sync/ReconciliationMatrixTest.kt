@@ -205,4 +205,80 @@ class ReconciliationMatrixTest {
         assertTrue(actions[0] is SyncAction.ConflictPreserveRemote)
         assertEquals(path, actions[0].relativePath)
     }
+
+    @Test
+    fun testLocalToCloud_IgnoresRemoteDeletion_DoesNotDeleteLocal() {
+        val path = "backup_file.md"
+        val localFile = File(tempFolder.root, path)
+
+        val local = mapOf(path to LocalItemSnapshot(path, localFile, 100L, 1000L, "hash1"))
+        val remote = emptyMap<String, RemoteItemSnapshot>() // Deleted in cloud
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+
+        val actions = ReconciliationPlanner.plan(
+            folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
+            syncDirection = io.relayfs.android.core.model.SyncDirection.LOCAL_TO_CLOUD
+        )
+
+        assertEquals(1, actions.size)
+        // In backup mode, local is preserved and re-uploaded rather than deleted locally
+        assertTrue(actions[0] is SyncAction.Upload)
+        assertEquals(path, actions[0].relativePath)
+    }
+
+    @Test
+    fun testLocalToCloud_LocalDeleted_DeletesRemote() {
+        val path = "deleted_backup_file.md"
+
+        val local = emptyMap<String, LocalItemSnapshot>() // Deleted locally
+        val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 100L, 1000L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+
+        val actions = ReconciliationPlanner.plan(
+            folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
+            syncDirection = io.relayfs.android.core.model.SyncDirection.LOCAL_TO_CLOUD
+        )
+
+        assertEquals(1, actions.size)
+        assertTrue(actions[0] is SyncAction.DeleteRemote)
+        assertEquals(path, actions[0].relativePath)
+    }
+
+    @Test
+    fun testCloudToLocal_IgnoresLocalDeletion_DoesNotDeleteRemote() {
+        val path = "download_file.md"
+
+        val local = emptyMap<String, LocalItemSnapshot>() // Deleted locally
+        val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 200L, 1500L, "hash_rem"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+
+        val actions = ReconciliationPlanner.plan(
+            folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
+            syncDirection = io.relayfs.android.core.model.SyncDirection.CLOUD_TO_LOCAL
+        )
+
+        assertEquals(1, actions.size)
+        // In download mode, remote is preserved and re-downloaded rather than deleted remotely
+        assertTrue(actions[0] is SyncAction.Download)
+        assertEquals(path, actions[0].relativePath)
+    }
+
+    @Test
+    fun testActiveConflictPath_ProducesNoOp() {
+        val path = "conflicted.md"
+        val localFile = File(tempFolder.root, path)
+
+        val local = mapOf(path to LocalItemSnapshot(path, localFile, 150L, 2000L, "hash_local"))
+        val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 250L, 3000L, "hash_remote"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_orig"))
+
+        val actions = ReconciliationPlanner.plan(
+            folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
+            activeConflictPaths = setOf(path)
+        )
+
+        assertEquals(1, actions.size)
+        assertTrue(actions[0] is SyncAction.NoOp)
+        assertEquals(path, actions[0].relativePath)
+    }
 }

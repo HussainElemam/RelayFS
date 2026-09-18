@@ -49,23 +49,48 @@ object AtomicFileWriter {
                 output.fd.sync() // Force physical disk flush
             }
 
-            if (destinationFile.exists()) {
-                destinationFile.delete()
-            }
-
-            val renameSuccess = stagingFile.renameTo(destinationFile)
-            if (!renameSuccess) {
-                // Fallback for cross-mount rename failures
-                stagingFile.copyTo(destinationFile, overwrite = true)
-                stagingFile.delete()
-            }
-
+            safeReplace(stagingFile, destinationFile)
             destinationFile
         } catch (e: Exception) {
             if (stagingFile.exists()) {
                 stagingFile.delete()
             }
             throw IOException("Atomic write failed for ${destinationFile.absolutePath}", e)
+        }
+    }
+
+    /**
+     * Safely replaces [destinationFile] with [stagingFile] using a temporary backup
+     * so that if the move or copy fails, the existing file is not corrupted or lost.
+     */
+    fun safeReplace(stagingFile: File, destinationFile: File) {
+        val parent = destinationFile.parentFile ?: stagingFile.parentFile ?: File(".")
+        if (!destinationFile.exists()) {
+            if (!stagingFile.renameTo(destinationFile)) {
+                stagingFile.copyTo(destinationFile, overwrite = true)
+                stagingFile.delete()
+            }
+        } else {
+            val backupFile = File(parent, ".${destinationFile.name}.${System.nanoTime()}.bak")
+            val backupCreated = destinationFile.renameTo(backupFile)
+            if (backupCreated) {
+                val renamed = stagingFile.renameTo(destinationFile)
+                if (renamed) {
+                    backupFile.delete()
+                } else {
+                    try {
+                        stagingFile.copyTo(destinationFile, overwrite = true)
+                        stagingFile.delete()
+                        backupFile.delete()
+                    } catch (copyEx: Exception) {
+                        backupFile.renameTo(destinationFile)
+                        throw copyEx
+                    }
+                }
+            } else {
+                stagingFile.copyTo(destinationFile, overwrite = true)
+                stagingFile.delete()
+            }
         }
     }
 

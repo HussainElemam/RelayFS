@@ -43,8 +43,9 @@ class DefaultCloudProviderFactory(
             )
         }
 
+        val effectiveEndpoint = tokenStorage.getEndpoint(accountId) ?: baseUrl
         val apiClient = PCloudApiClient(
-            baseUrl = baseUrl,
+            baseUrl = effectiveEndpoint,
             tokenProvider = {
                 runBlocking { tokenStorage.getToken(accountId) }
             },

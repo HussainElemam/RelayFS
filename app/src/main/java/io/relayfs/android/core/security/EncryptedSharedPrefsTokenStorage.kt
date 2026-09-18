@@ -42,6 +42,7 @@ class EncryptedSharedPrefsTokenStorage(
     override suspend fun deleteToken(accountId: String) = withContext(ioDispatcher) {
         sharedPreferences.edit()
             .remove(keyForAccount(accountId))
+            .remove(keyForEndpoint(accountId))
             .apply()
     }
 
@@ -49,11 +50,23 @@ class EncryptedSharedPrefsTokenStorage(
         sharedPreferences.contains(keyForAccount(accountId))
     }
 
+    override suspend fun saveEndpoint(accountId: String, endpoint: String) = withContext(ioDispatcher) {
+        sharedPreferences.edit()
+            .putString(keyForEndpoint(accountId), endpoint)
+            .apply()
+    }
+
+    override suspend fun getEndpoint(accountId: String): String? = withContext(ioDispatcher) {
+        sharedPreferences.getString(keyForEndpoint(accountId), null)
+    }
+
     companion object {
         const val DEFAULT_PREF_FILE = "relayfs_secure_tokens"
         private const val KEY_PREFIX = "token_account_"
+        private const val KEY_ENDPOINT_PREFIX = "endpoint_account_"
 
         fun keyForAccount(accountId: String): String = "$KEY_PREFIX$accountId"
+        fun keyForEndpoint(accountId: String): String = "$KEY_ENDPOINT_PREFIX$accountId"
 
         fun createEncryptedPreferences(
             context: Context,

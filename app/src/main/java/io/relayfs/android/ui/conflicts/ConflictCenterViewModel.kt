@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import io.relayfs.android.core.sync.hash.FastHasher
 import java.io.File
 
 data class ConflictsUiState(
@@ -63,8 +64,35 @@ class ConflictCenterViewModel(
                 id = conflict.id,
                 status = ConflictStatus.RESOLVED_KEEP_LOCAL
             )
+            val pair = database.folderPairDao().getById(conflict.folderPairId)
+            val conflictRelPath = if (pair != null) {
+                try {
+                    conflictFile.relativeTo(File(pair.localPath)).path.replace('\\', '/')
+                } catch (_: Exception) {
+                    conflictFile.name
+                }
+            } else conflictFile.name
+
             // Remove the branched file entry from baseline if present
-            database.syncBaselineDao().deleteByPath(conflict.folderPairId, conflictFile.name)
+            database.syncBaselineDao().deleteByPath(conflict.folderPairId, conflictRelPath)
+
+            // Baseline local as modified and remote as unchanged to trigger upload on next sync
+            val localFile = File(conflict.localFilePath)
+            if (localFile.exists()) {
+                database.syncBaselineDao().upsert(
+                    io.relayfs.android.core.database.entity.SyncBaselineEntity(
+                        folderPairId = conflict.folderPairId,
+                        relativePath = conflict.relativePath,
+                        remoteId = conflict.remoteFileId,
+                        localModifiedTimeMillis = 0L,
+                        remoteModifiedTimeMillis = conflict.remoteModifiedTimeMillis,
+                        localSizeBytes = 0L,
+                        remoteSizeBytes = localFile.length(),
+                        contentHash = conflict.remoteContentHash ?: "",
+                        isDirectory = false
+                    )
+                )
+            }
         }
     }
 
@@ -82,17 +110,72 @@ class ConflictCenterViewModel(
                 id = conflict.id,
                 status = ConflictStatus.RESOLVED_KEEP_REMOTE
             )
-            database.syncBaselineDao().deleteByPath(conflict.folderPairId, conflictFile.name)
+            val pair = database.folderPairDao().getById(conflict.folderPairId)
+            val conflictRelPath = if (pair != null) {
+                try {
+                    conflictFile.relativeTo(File(pair.localPath)).path.replace('\\', '/')
+                } catch (_: Exception) {
+                    conflictFile.name
+                }
+            } else conflictFile.name
+
+            database.syncBaselineDao().deleteByPath(conflict.folderPairId, conflictRelPath)
+
+            // Align baseline with remote metadata and updated local file so next sync is NoOp
+            val hash = conflict.remoteContentHash ?: FastHasher.hashFile(localFile)
+            database.syncBaselineDao().upsert(
+                io.relayfs.android.core.database.entity.SyncBaselineEntity(
+                    folderPairId = conflict.folderPairId,
+                    relativePath = conflict.relativePath,
+                    remoteId = conflict.remoteFileId,
+                    localModifiedTimeMillis = localFile.lastModified(),
+                    remoteModifiedTimeMillis = conflict.remoteModifiedTimeMillis,
+                    localSizeBytes = localFile.length(),
+                    remoteSizeBytes = localFile.length(),
+                    contentHash = hash,
+                    isDirectory = false
+                )
+            )
         }
     }
 
     fun resolveKeepBoth(conflict: SyncConflictEntity): Job {
         return viewModelScope.launch(ioDispatcher) {
-            // Keep both files on disk as distinct items
             database.syncConflictDao().resolveConflict(
                 id = conflict.id,
                 status = ConflictStatus.RESOLVED_KEEP_BOTH
             )
+
+            val conflictFile = File(conflict.conflictFilePath)
+            val pair = database.folderPairDao().getById(conflict.folderPairId)
+            val conflictRelPath = if (pair != null) {
+                try {
+                    conflictFile.relativeTo(File(pair.localPath)).path.replace('\\', '/')
+                } catch (_: Exception) {
+                    conflictFile.name
+                }
+            } else conflictFile.name
+
+            // Delete dummy baseline so branched file uploads as a new file on next sync
+            database.syncBaselineDao().deleteByPath(conflict.folderPairId, conflictRelPath)
+
+            // Baseline local as modified to trigger upload of local version
+            val localFile = File(conflict.localFilePath)
+            if (localFile.exists()) {
+                database.syncBaselineDao().upsert(
+                    io.relayfs.android.core.database.entity.SyncBaselineEntity(
+                        folderPairId = conflict.folderPairId,
+                        relativePath = conflict.relativePath,
+                        remoteId = conflict.remoteFileId,
+                        localModifiedTimeMillis = 0L,
+                        remoteModifiedTimeMillis = conflict.remoteModifiedTimeMillis,
+                        localSizeBytes = 0L,
+                        remoteSizeBytes = localFile.length(),
+                        contentHash = conflict.remoteContentHash ?: "",
+                        isDirectory = false
+                    )
+                )
+            }
         }
     }
 

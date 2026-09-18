@@ -120,13 +120,25 @@ class SyncCoordinator(
         val baselineItems = mapBaselineItems(baselineEntities)
 
         // 4. Plan reconciliation actions
+        val activeConflicts = database.syncConflictDao().getActiveConflicts(folderPairId)
+        val activeConflictPaths = activeConflicts.flatMap { conflict ->
+            val branchRel = try {
+                File(conflict.conflictFilePath).relativeTo(localRoot).path.replace('\\', '/')
+            } catch (_: Exception) {
+                ""
+            }
+            listOf(conflict.relativePath, branchRel)
+        }.filter { it.isNotBlank() }.toSet()
+
         val plannedActions = ReconciliationPlanner.plan(
             folderPairId = folderPairId,
             localRoot = localRoot,
             remoteFolderId = folderPair.remoteFolderId,
             localItems = localItems,
             remoteItems = remoteItems,
-            baselineItems = baselineItems
+            baselineItems = baselineItems,
+            syncDirection = folderPair.syncDirection,
+            activeConflictPaths = activeConflictPaths
         )
 
         onProgress?.invoke(

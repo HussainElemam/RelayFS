@@ -71,4 +71,15 @@ class AtomicFileWriterTest {
         val stagingFile = File(tempFolder.root, ".safe_file.txt.sync_tmp")
         assertFalse(stagingFile.exists())
     }
+
+    @Test
+    fun testSafeReplaceSuccess() {
+        val destFile = tempFolder.newFile("existing_safe.txt").apply { writeText("Original Version") }
+        val stagingFile = tempFolder.newFile("staging_new.txt").apply { writeText("Replacement Version") }
+
+        AtomicFileWriter.safeReplace(stagingFile, destFile)
+
+        assertEquals("Replacement Version", destFile.readText())
+        assertFalse(stagingFile.exists())
+    }
 }

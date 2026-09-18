@@ -71,4 +71,18 @@ class TokenStorageTest {
         assertNull(tokenStorage.getToken(account1))
         assertEquals(token2, tokenStorage.getToken(account2))
     }
+
+    @Test
+    fun testEndpointLifecycle() = runTest {
+        val accountId = "pcloud-eu-account"
+        val euEndpoint = "https://eapi.pcloud.com"
+
+        assertNull(tokenStorage.getEndpoint(accountId))
+
+        tokenStorage.saveEndpoint(accountId, euEndpoint)
+        assertEquals(euEndpoint, tokenStorage.getEndpoint(accountId))
+
+        tokenStorage.deleteToken(accountId)
+        assertNull(tokenStorage.getEndpoint(accountId))
+    }
 }

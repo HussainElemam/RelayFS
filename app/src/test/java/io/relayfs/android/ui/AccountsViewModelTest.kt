@@ -15,10 +15,16 @@ import org.robolectric.annotation.Config
 
 class FakeTokenStorage : TokenStorage {
     private val tokens = mutableMapOf<String, String>()
+    private val endpoints = mutableMapOf<String, String>()
     override suspend fun saveToken(accountId: String, token: String) { tokens[accountId] = token }
     override suspend fun getToken(accountId: String): String? = tokens[accountId]
-    override suspend fun deleteToken(accountId: String) { tokens.remove(accountId) }
+    override suspend fun deleteToken(accountId: String) {
+        tokens.remove(accountId)
+        endpoints.remove(accountId)
+    }
     override suspend fun hasToken(accountId: String): Boolean = tokens.containsKey(accountId)
+    override suspend fun saveEndpoint(accountId: String, endpoint: String) { endpoints[accountId] = endpoint }
+    override suspend fun getEndpoint(accountId: String): String? = endpoints[accountId]
 }
 
 @RunWith(RobolectricTestRunner::class)
@@ -84,6 +90,22 @@ class AccountsViewModelTest {
         kotlinx.coroutines.delay(100)
 
         assertEquals("direct_token_xyz", tokenStorage.getToken(AccountsViewModel.DEFAULT_ACCOUNT_ID))
+        assertEquals("https://api.pcloud.com", tokenStorage.getEndpoint(AccountsViewModel.DEFAULT_ACCOUNT_ID))
+    }
+
+    @Test
+    fun testTokenFlowSavesEuEndpoint() = runTest {
+        io.relayfs.android.core.provider.pcloud.auth.OAuthEventBus.emitCallback(
+            io.relayfs.android.core.provider.pcloud.auth.OAuthCallbackData(
+                accessToken = "eu_token_456",
+                locationId = 2
+            )
+        )
+
+        kotlinx.coroutines.delay(100)
+
+        assertEquals("eu_token_456", tokenStorage.getToken(AccountsViewModel.DEFAULT_ACCOUNT_ID))
+        assertEquals("https://eapi.pcloud.com", tokenStorage.getEndpoint(AccountsViewModel.DEFAULT_ACCOUNT_ID))
     }
 }
 

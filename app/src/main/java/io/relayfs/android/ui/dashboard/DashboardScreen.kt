@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.Card
@@ -306,6 +307,7 @@ fun HealthBadge(health: SyncHealth) {
         SyncHealth.SYNCING -> Triple(Icons.Default.Sync, Color(0xFF2196F3), "Syncing")
         SyncHealth.HAS_CONFLICTS -> Triple(Icons.Default.SyncProblem, Color(0xFFFF9800), "Conflicts")
         SyncHealth.ERROR -> Triple(Icons.Default.Error, Color(0xFFF44336), "Error")
+        SyncHealth.NOT_CONFIGURED -> Triple(Icons.Default.Info, Color(0xFF9E9E9E), "No Pairs")
     }
 
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -421,7 +423,7 @@ fun DashboardPreview() {
                         id = "1",
                         accountId = "acc-1",
                         name = "My Obsidian Notes",
-                        localPath = "/sdcard/Documents/Obsidian",
+                        localPath = "/storage/emulated/0/Documents/Obsidian",
                         remoteFolderId = "d0",
                         remoteFolderPath = "/Notes",
                         isObsidianVault = true,

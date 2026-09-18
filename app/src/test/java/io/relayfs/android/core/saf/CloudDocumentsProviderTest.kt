@@ -303,6 +303,35 @@ class CloudDocumentsProviderTest {
     }
 
     @Test
+    fun testOpenDocument_WriteMode_ExistingFileWithContent_DownloadsBeforeEdit() = runTest {
+        fakeTokenStorage.saveToken(AccountsViewModel.DEFAULT_ACCOUNT_ID, "token")
+        val initialContent = "Original remote content for editing"
+        fakeCloudProvider.fileContents["f_existing_edit"] = initialContent
+
+        val entity = SafMetadataEntity(
+            documentId = "f_existing_edit",
+            parentDocumentId = "d0",
+            accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
+            displayName = "existing_edit.txt",
+            mimeType = "text/plain",
+            sizeBytes = initialContent.length.toLong(),
+            isDirectory = false
+        )
+        database.safMetadataDao().insertOrUpdate(entity)
+
+        val pfd = provider.openDocument("f_existing_edit", "rw", null)
+        assertNotNull(pfd)
+
+        val stagingDir = File(cacheDir, "staging")
+        val stagingFiles = stagingDir.listFiles() ?: emptyArray()
+        assertTrue(stagingFiles.isNotEmpty())
+        val stagingFile = stagingFiles.first { it.name.startsWith("f_existing_edit") }
+        assertEquals(initialContent, stagingFile.readText())
+
+        pfd.close()
+    }
+
+    @Test
     fun testCreateDocument_Directory() = runTest {
         fakeTokenStorage.saveToken(AccountsViewModel.DEFAULT_ACCOUNT_ID, "token")
         val newDocId = provider.createDocument("d0", DocumentsContract.Document.MIME_TYPE_DIR, "New Directory")

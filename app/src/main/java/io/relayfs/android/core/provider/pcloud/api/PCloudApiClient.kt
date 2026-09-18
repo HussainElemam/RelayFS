@@ -203,16 +203,8 @@ class PCloudApiClient(
                 }
             }
 
-            // Atomic rename
-            if (destinationFile.exists()) {
-                destinationFile.delete()
-            }
-            val renamed = stagingFile.renameTo(destinationFile)
-            if (!renamed) {
-                // Fallback copy & delete if rename across partitions fails
-                stagingFile.copyTo(destinationFile, overwrite = true)
-                stagingFile.delete()
-            }
+            // Safe atomic file replacement with backup
+            io.relayfs.android.core.sync.io.AtomicFileWriter.safeReplace(stagingFile, destinationFile)
         }
     }
 

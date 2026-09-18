@@ -131,7 +131,10 @@ object OAuthPkceHelper {
      * Base64URL encoding without padding characters.
      */
     fun base64UrlEncode(bytes: ByteArray): String {
-        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        return android.util.Base64.encodeToString(
+            bytes,
+            android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING
+        )
     }
 }
 

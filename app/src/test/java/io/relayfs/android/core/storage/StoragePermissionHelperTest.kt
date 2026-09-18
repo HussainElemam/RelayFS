@@ -57,4 +57,12 @@ class StoragePermissionHelperTest {
         )
         assertEquals(initialUri, extra)
     }
+
+    @Test
+    fun resolveTreeUriToPath_primaryStorage_resolvesToExternalStoragePath() {
+        val uri = Uri.parse("content://com.android.externalstorage.documents/tree/primary%3ADocuments%2FObsidian")
+        val path = StoragePermissionHelper.resolveTreeUriToPath(uri)
+        assertNotNull(path)
+        assertTrue(path!!.endsWith("Documents/Obsidian"))
+    }
 }
