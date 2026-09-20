@@ -210,6 +210,32 @@ class SyncExecutionPipelineTest {
         assertEquals("note.md", target?.second)
         assertEquals("d_d_d0_Personal_Work", target?.first)
     }
+
+    @Test
+    fun testNestedUploadFailsClosedWhenRemoteDirectoryCannotBeResolved() = runTest {
+        val nestedDir = File(tempFolder.root, "Unavailable").apply { mkdirs() }
+        val nestedFile = File(nestedDir, "note.md").apply { writeText("Must not flatten") }
+        fakeCloud.failFolderCreation = true
+
+        val action = SyncAction.Upload(
+            relativePath = "Unavailable/note.md",
+            localItem = LocalItemSnapshot(
+                "Unavailable/note.md",
+                nestedFile,
+                nestedFile.length(),
+                nestedFile.lastModified(),
+                "h"
+            ),
+            parentFolderId = "d0"
+        )
+
+        val result = pipeline.execute(folderPairId, tempFolder.root, "d0", listOf(action))
+
+        assertFalse(result.isSuccess)
+        assertEquals(1, result.errorCount)
+        assertTrue(fakeCloud.uploadTargets.isEmpty())
+        assertNull(database.syncBaselineDao().getBaseline(folderPairId, "Unavailable/note.md"))
+    }
 }
 
 /**
@@ -224,12 +250,15 @@ private class FakeCloudProvider : CloudProvider {
     val createdFolders = mutableListOf<String>()
     val filesToDownload = mutableMapOf<String, String>()
     val deletedRemoteIds = mutableListOf<String>()
+    var failFolderCreation = false
 
     override suspend fun verifyConnection(): Result<CloudAccount> = Result.success(
         CloudAccount(accountId, ProviderType.PCLOUD, "test@example.com", "test", "https://api.pcloud.com")
     )
 
-    override suspend fun listFolder(remoteFolderId: String, recursive: Boolean) = Result.success(emptyList<CloudItem>())
+    override suspend fun listFolder(remoteFolderId: String, recursive: Boolean) =
+        if (failFolderCreation) Result.failure(IllegalStateException("list failed"))
+        else Result.success(emptyList<CloudItem>())
     override suspend fun getItemMetadata(remoteId: String) = Result.failure<CloudItem>(UnsupportedOperationException())
     override fun supportsDeltaSync() = true
     override suspend fun getDeltaChanges(sinceToken: String?) = Result.success(DeltaChanges("1", emptyList(), false))
@@ -258,6 +287,7 @@ private class FakeCloudProvider : CloudProvider {
     }
 
     override suspend fun createFolder(parentFolderId: String, folderName: String): Result<CloudItem> {
+        if (failFolderCreation) return Result.failure(IllegalStateException("create failed"))
         val folderId = "d_${parentFolderId}_$folderName"
         createdFolders.add(folderName)
         return Result.success(

@@ -36,6 +36,8 @@ import org.robolectric.annotation.Config
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.FileNotFoundException
+import java.io.IOException
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -332,6 +334,33 @@ class CloudDocumentsProviderTest {
     }
 
     @Test
+    fun testOpenDocument_WriteMode_DownloadFailureDoesNotCreateEmptyStagingFile() = runTest {
+        fakeCloudProvider.downloadFailure = IOException("network unavailable")
+        val entity = SafMetadataEntity(
+            documentId = "f_failed_edit",
+            parentDocumentId = "d0",
+            accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
+            displayName = "important.txt",
+            mimeType = "text/plain",
+            sizeBytes = 128L,
+            isDirectory = false
+        )
+        database.safMetadataDao().insertOrUpdate(entity)
+
+        var exceptionThrown = false
+        try {
+            provider.openDocument("f_failed_edit", "rw", null)
+        } catch (_: FileNotFoundException) {
+            exceptionThrown = true
+        }
+
+        assertTrue(exceptionThrown)
+        val stagingFiles = File(cacheDir, "staging").listFiles().orEmpty()
+        assertTrue(stagingFiles.none { it.name.startsWith("f_failed_edit") })
+        assertFalse(File(File(cacheDir, "read"), "f_failed_edit").exists())
+    }
+
+    @Test
     fun testCreateDocument_Directory() = runTest {
         fakeTokenStorage.saveToken(AccountsViewModel.DEFAULT_ACCOUNT_ID, "token")
         val newDocId = provider.createDocument("d0", DocumentsContract.Document.MIME_TYPE_DIR, "New Directory")
@@ -439,6 +468,7 @@ class CloudDocumentsProviderTest {
         override val accountId: String = AccountsViewModel.DEFAULT_ACCOUNT_ID
 
         var itemsToReturn: List<CloudItem> = emptyList()
+        var downloadFailure: Exception? = null
         val fileContents = mutableMapOf<String, String>()
         val deletedIds = mutableListOf<String>()
 
@@ -462,6 +492,7 @@ class CloudDocumentsProviderTest {
             destinationFile: File,
             progress: ((bytesRead: Long, totalBytes: Long) -> Unit)?
         ): Result<Unit> {
+            downloadFailure?.let { return Result.failure(it) }
             val content = fileContents[remoteId] ?: "mock content for $remoteId"
             destinationFile.parentFile?.mkdirs()
             destinationFile.writeText(content)

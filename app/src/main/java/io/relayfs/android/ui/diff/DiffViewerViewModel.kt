@@ -5,7 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import io.relayfs.android.core.database.AppDatabase
 import io.relayfs.android.core.database.entity.SyncConflictEntity
-import io.relayfs.android.core.model.ConflictStatus
+import io.relayfs.android.core.sync.engine.ConflictResolutionManager
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,6 +32,8 @@ class DiffViewerViewModel(
     private val conflictId: String,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) : ViewModel() {
+
+    private val resolutionManager = ConflictResolutionManager(database)
 
     private val _uiState = MutableStateFlow(DiffViewerUiState(isLoading = true))
     val uiState: StateFlow<DiffViewerUiState> = _uiState.asStateFlow()
@@ -87,47 +89,32 @@ class DiffViewerViewModel(
     fun resolveKeepLocal(): Job {
         return viewModelScope.launch(ioDispatcher) {
             val conflict = _uiState.value.conflict ?: return@launch
-            val conflictFile = File(conflict.conflictFilePath)
-            if (conflictFile.exists()) {
-                conflictFile.delete()
-            }
-            database.syncConflictDao().resolveConflict(
-                id = conflict.id,
-                status = ConflictStatus.RESOLVED_KEEP_LOCAL
-            )
-            database.syncBaselineDao().deleteByPath(conflict.folderPairId, conflictFile.name)
-            _uiState.update { it.copy(isResolved = true) }
+            resolve { resolutionManager.keepLocal(conflict) }
         }
     }
 
     fun resolveKeepCloud(): Job {
         return viewModelScope.launch(ioDispatcher) {
             val conflict = _uiState.value.conflict ?: return@launch
-            val conflictFile = File(conflict.conflictFilePath)
-            val localFile = File(conflict.localFilePath)
-
-            if (conflictFile.exists()) {
-                conflictFile.copyTo(localFile, overwrite = true)
-                conflictFile.delete()
-            }
-
-            database.syncConflictDao().resolveConflict(
-                id = conflict.id,
-                status = ConflictStatus.RESOLVED_KEEP_REMOTE
-            )
-            database.syncBaselineDao().deleteByPath(conflict.folderPairId, conflictFile.name)
-            _uiState.update { it.copy(isResolved = true) }
+            resolve { resolutionManager.keepCloud(conflict) }
         }
     }
 
     fun resolveKeepBoth(): Job {
         return viewModelScope.launch(ioDispatcher) {
             val conflict = _uiState.value.conflict ?: return@launch
-            database.syncConflictDao().resolveConflict(
-                id = conflict.id,
-                status = ConflictStatus.RESOLVED_KEEP_BOTH
-            )
-            _uiState.update { it.copy(isResolved = true) }
+            resolve { resolutionManager.keepBoth(conflict) }
+        }
+    }
+
+    private suspend fun resolve(action: suspend () -> Unit) {
+        try {
+            action()
+            _uiState.update { it.copy(isResolved = true, errorMessage = null) }
+        } catch (e: Exception) {
+            _uiState.update {
+                it.copy(errorMessage = "Could not resolve conflict: ${e.message ?: "unknown error"}")
+            }
         }
     }
 

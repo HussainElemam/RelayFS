@@ -204,7 +204,7 @@ class CloudDocumentsProvider : DocumentsProvider() {
         val safDao = database.safMetadataDao()
         val entity = runBlocking(Dispatchers.IO) {
             safDao.getById(documentId)
-        }
+        } ?: throw FileNotFoundException("Document $documentId not found in metadata cache")
 
         val pfdMode = ParcelFileDescriptor.parseMode(mode)
         val isWrite = mode.contains("w") || (pfdMode and ParcelFileDescriptor.MODE_WRITE_ONLY) != 0
@@ -223,7 +223,17 @@ class CloudDocumentsProvider : DocumentsProvider() {
                 val downloadResult = runBlocking(Dispatchers.IO) {
                     provider.downloadFile(documentId, cachedFile)
                 }
-                downloadResult.getOrThrow()
+                try {
+                    downloadResult.getOrThrow()
+                    if (!cachedFile.exists() || (entity.sizeBytes > 0L && cachedFile.length() == 0L)) {
+                        throw IOException("Cloud provider returned no content")
+                    }
+                } catch (e: Exception) {
+                    cachedFile.delete()
+                    throw FileNotFoundException("Could not download $documentId for reading").apply {
+                        initCause(e)
+                    }
+                }
                 signal?.throwIfCanceled()
             }
             return ParcelFileDescriptor.open(cachedFile, ParcelFileDescriptor.MODE_READ_ONLY)
@@ -235,17 +245,24 @@ class CloudDocumentsProvider : DocumentsProvider() {
 
         // If file exists on cloud but is not yet in read cache, download it first so edits/appends don't truncate existing data
         if (!cachedFile.exists() || cachedFile.length() == 0L) {
-            val hasRemoteContent = entity != null && (entity.sizeBytes ?: 0L) > 0L
+            val hasRemoteContent = entity.sizeBytes > 0L
             if (hasRemoteContent) {
                 signal?.throwIfCanceled()
                 val provider = runBlocking(Dispatchers.IO) {
                     providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)
-                }
-                if (provider != null) {
-                    runCatching {
-                        runBlocking(Dispatchers.IO) {
-                            provider.downloadFile(documentId, cachedFile)
-                        }
+                } ?: throw FileNotFoundException("Cloud provider not available")
+                try {
+                    val downloadResult = runBlocking(Dispatchers.IO) {
+                        provider.downloadFile(documentId, cachedFile)
+                    }
+                    downloadResult.getOrThrow()
+                    if (!cachedFile.exists() || cachedFile.length() == 0L) {
+                        throw IOException("Cloud provider returned no content")
+                    }
+                } catch (e: Exception) {
+                    cachedFile.delete()
+                    throw FileNotFoundException("Could not download $documentId before editing").apply {
+                        initCause(e)
                     }
                 }
                 signal?.throwIfCanceled()
@@ -269,7 +286,7 @@ class CloudDocumentsProvider : DocumentsProvider() {
         ctx: Context,
         documentId: String,
         stagingFile: File,
-        entity: SafMetadataEntity?
+        entity: SafMetadataEntity
     ) {
         val readDir = File(safCacheDir, "read").apply { mkdirs() }
         val cachedFile = File(readDir, documentId)
@@ -281,9 +298,9 @@ class CloudDocumentsProvider : DocumentsProvider() {
             context = ctx,
             documentId = documentId,
             file = stagingFile,
-            parentFolderId = entity?.parentDocumentId ?: ROOT_DOCUMENT_ID,
-            remoteName = entity?.displayName ?: stagingFile.name,
-            accountId = entity?.accountId ?: AccountsViewModel.DEFAULT_ACCOUNT_ID
+            parentFolderId = entity.parentDocumentId ?: ROOT_DOCUMENT_ID,
+            remoteName = entity.displayName,
+            accountId = entity.accountId
         )
     }
 

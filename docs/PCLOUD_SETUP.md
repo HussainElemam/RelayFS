@@ -9,11 +9,14 @@
 
 1. Log in to [pCloud Developers - My Apps](https://docs.pcloud.com/my_apps/).
 2. Click on your registered application (e.g. `RelayFS`).
-3. Ensure the **Redirect URI** is set to:
+3. In **Settings**, ensure **"Allow implicit grant"** is set to **Allow**.
+4. In the **Redirect URIs** section, enter:
    ```text
-   relayfs://oauth
+   pcloud-oauth://io.relayfs.android
    ```
-4. Copy your **App Key / Client ID**.
+   and click **"Save changes"**.
+   *(Note: The input field clears itself upon saving as an "add new" input. Refresh the browser page (F5) to verify it appears in the saved list above).*
+5. In **Details**, copy your **App Key / Client ID** (Client secret is not required for mobile).
 
 ---
 
@@ -36,4 +39,3 @@ PCLOUD_CLIENT_ID=your_actual_pcloud_app_key_here
 3. In RelayFS, go to **Accounts** and tap **"Sign in with pCloud"**.
 4. Log into your pCloud account in the browser tab and tap **"Allow"**.
 5. The app automatically captures your access token via the **Token Flow** (`response_type=token`) and connects your storage.
-

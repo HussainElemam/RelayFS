@@ -82,4 +82,42 @@ class AtomicFileWriterTest {
         assertEquals("Replacement Version", destFile.readText())
         assertFalse(stagingFile.exists())
     }
+
+    @Test
+    fun testSafeReplaceAcrossDirectoriesFailsWithoutTouchingOriginal() {
+        val destinationDir = tempFolder.newFolder("destination")
+        val stagingDir = tempFolder.newFolder("staging")
+        val destFile = File(destinationDir, "file.txt").apply { writeText("Original") }
+        val stagingFile = File(stagingDir, "file.txt").apply { writeText("Replacement") }
+
+        var exceptionThrown = false
+        try {
+            AtomicFileWriter.safeReplace(stagingFile, destFile)
+        } catch (_: IllegalArgumentException) {
+            exceptionThrown = true
+        }
+
+        assertTrue(exceptionThrown)
+        assertEquals("Original", destFile.readText())
+        assertEquals("Replacement", stagingFile.readText())
+    }
+
+    @Test
+    fun testExpectedSizeMismatchDoesNotReplaceOriginal() = runTest {
+        val destFile = tempFolder.newFile("size_checked.txt").apply { writeText("Original") }
+
+        var exceptionThrown = false
+        try {
+            AtomicFileWriter.write(
+                destinationFile = destFile,
+                source = "short".byteInputStream(),
+                expectedSize = 100L
+            )
+        } catch (_: IOException) {
+            exceptionThrown = true
+        }
+
+        assertTrue(exceptionThrown)
+        assertEquals("Original", destFile.readText())
+    }
 }

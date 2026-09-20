@@ -13,9 +13,12 @@ import io.relayfs.android.core.service.SyncNotificationManager
 import io.relayfs.android.core.sync.hash.FastHasher
 import io.relayfs.android.core.watcher.filter.PathFilter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * High-level coordinator that orchestrates end-to-end synchronization passes:
@@ -39,152 +42,151 @@ class SyncCoordinator(
     suspend fun syncFolderPair(
         folderPairId: String,
         onProgress: ((title: String, detail: String, current: Int, total: Int) -> Unit)? = null
-    ): SyncResult = withContext(Dispatchers.IO) {
-        val folderPair = database.folderPairDao().getById(folderPairId)
-            ?: return@withContext SyncResult(
-                folderPairId = folderPairId,
-                startTimeMillis = System.currentTimeMillis(),
-                endTimeMillis = System.currentTimeMillis(),
-                isSuccess = false,
-                errorCount = 1,
-                errorMessages = listOf("Folder pair '$folderPairId' not found in database")
-            )
+    ): SyncResult = mutexFor(folderPairId).withLock {
+        withContext(Dispatchers.IO) {
+            val folderPair = database.folderPairDao().getById(folderPairId)
+                ?: return@withContext SyncResult(
+                    folderPairId = folderPairId,
+                    startTimeMillis = System.currentTimeMillis(),
+                    endTimeMillis = System.currentTimeMillis(),
+                    isSuccess = false,
+                    errorCount = 1,
+                    errorMessages = listOf("Folder pair '$folderPairId' not found in database")
+                )
 
-        if (!folderPair.isEnabled) {
-            return@withContext SyncResult(
-                folderPairId = folderPairId,
-                startTimeMillis = System.currentTimeMillis(),
-                endTimeMillis = System.currentTimeMillis(),
-                isSuccess = true
-            )
-        }
-
-        val localRoot = File(folderPair.localPath)
-        if (!localRoot.exists()) {
-            localRoot.mkdirs()
-        }
-        if (!localRoot.exists() || !localRoot.isDirectory) {
-            val errorMsg = "Local directory does not exist or is invalid: ${folderPair.localPath}"
-            logSyncResult(folderPairId, false, errorMsg)
-            return@withContext SyncResult(
-                folderPairId = folderPairId,
-                startTimeMillis = System.currentTimeMillis(),
-                endTimeMillis = System.currentTimeMillis(),
-                isSuccess = false,
-                errorCount = 1,
-                errorMessages = listOf(errorMsg)
-            )
-        }
-
-        val cloudProvider = cloudProviderFactory.getProvider(folderPair.accountId)
-        if (cloudProvider == null) {
-            val errorMsg = "No valid cloud provider or credentials for account '${folderPair.accountId}'"
-            logSyncResult(folderPairId, false, errorMsg)
-            return@withContext SyncResult(
-                folderPairId = folderPairId,
-                startTimeMillis = System.currentTimeMillis(),
-                endTimeMillis = System.currentTimeMillis(),
-                isSuccess = false,
-                errorCount = 1,
-                errorMessages = listOf(errorMsg)
-            )
-        }
-
-        onProgress?.invoke("Syncing ${folderPair.name}", "Scanning files...", 0, 0)
-
-        // 1. Scan local items
-        val localItems = scanLocalFiles(localRoot, pathFilter)
-
-        // 2. Fetch remote items
-        val remoteListResult = cloudProvider.listFolder(folderPair.remoteFolderId, recursive = true)
-        if (remoteListResult.isFailure) {
-            val exception = remoteListResult.exceptionOrNull()
-            val errorMsg = "Failed to list remote folder '${folderPair.remoteFolderId}': ${exception?.message}"
-            logSyncResult(folderPairId, false, errorMsg)
-            if (exception is IOException) {
-                throw exception // Propagate network error for worker retry
+            if (!folderPair.isEnabled) {
+                return@withContext SyncResult(
+                    folderPairId = folderPairId,
+                    startTimeMillis = System.currentTimeMillis(),
+                    endTimeMillis = System.currentTimeMillis(),
+                    isSuccess = true
+                )
             }
-            return@withContext SyncResult(
-                folderPairId = folderPairId,
-                startTimeMillis = System.currentTimeMillis(),
-                endTimeMillis = System.currentTimeMillis(),
-                isSuccess = false,
-                errorCount = 1,
-                errorMessages = listOf(errorMsg)
-            )
-        }
-        val remoteItems = mapRemoteItems(remoteListResult.getOrThrow(), folderPair.remoteFolderPath, pathFilter)
 
-        // 3. Load baseline snapshots
-        val baselineEntities = database.syncBaselineDao().getAllForFolderPair(folderPairId)
-        val baselineItems = mapBaselineItems(baselineEntities)
-
-        // 4. Plan reconciliation actions
-        val activeConflicts = database.syncConflictDao().getActiveConflicts(folderPairId)
-        val activeConflictPaths = activeConflicts.flatMap { conflict ->
-            val branchRel = try {
-                File(conflict.conflictFilePath).relativeTo(localRoot).path.replace('\\', '/')
-            } catch (_: Exception) {
-                ""
+            val localRoot = File(folderPair.localPath)
+            if (!localRoot.exists() || !localRoot.isDirectory) {
+                val errorMsg = "Local directory does not exist or is invalid: ${folderPair.localPath}"
+                logSyncResult(folderPairId, false, errorMsg)
+                return@withContext SyncResult(
+                    folderPairId = folderPairId,
+                    startTimeMillis = System.currentTimeMillis(),
+                    endTimeMillis = System.currentTimeMillis(),
+                    isSuccess = false,
+                    errorCount = 1,
+                    errorMessages = listOf(errorMsg)
+                )
             }
-            listOf(conflict.relativePath, branchRel)
-        }.filter { it.isNotBlank() }.toSet()
 
-        val plannedActions = ReconciliationPlanner.plan(
-            folderPairId = folderPairId,
-            localRoot = localRoot,
-            remoteFolderId = folderPair.remoteFolderId,
-            localItems = localItems,
-            remoteItems = remoteItems,
-            baselineItems = baselineItems,
-            syncDirection = folderPair.syncDirection,
-            activeConflictPaths = activeConflictPaths
-        )
+            val cloudProvider = cloudProviderFactory.getProvider(folderPair.accountId)
+            if (cloudProvider == null) {
+                val errorMsg = "No valid cloud provider or credentials for account '${folderPair.accountId}'"
+                logSyncResult(folderPairId, false, errorMsg)
+                return@withContext SyncResult(
+                    folderPairId = folderPairId,
+                    startTimeMillis = System.currentTimeMillis(),
+                    endTimeMillis = System.currentTimeMillis(),
+                    isSuccess = false,
+                    errorCount = 1,
+                    errorMessages = listOf(errorMsg)
+                )
+            }
 
-        onProgress?.invoke(
-            "Syncing ${folderPair.name}",
-            "Executing ${plannedActions.size} actions...",
-            0,
-            plannedActions.size
-        )
+            onProgress?.invoke("Syncing ${folderPair.name}", "Scanning files...", 0, 0)
 
-        // 5. Execute planned actions
-        val pipeline = SyncExecutionPipeline(database, cloudProvider)
-        val result = pipeline.execute(
-            folderPairId = folderPairId,
-            localRoot = localRoot,
-            remoteFolderId = folderPair.remoteFolderId,
-            plannedActions = plannedActions
-        )
+            // 1. Scan local items
+            val localItems = scanLocalFiles(localRoot, pathFilter)
 
-        // 6. Record audit log
-        val logMessage = buildString {
-            append("Sync finished: ")
-            append("${result.uploadedCount} uploaded, ")
-            append("${result.downloadedCount} downloaded, ")
-            append("${result.deletedLocalCount} local deleted, ")
-            append("${result.deletedRemoteCount} remote deleted, ")
-            append("${result.conflictCount} conflicts, ")
-            append("${result.errorCount} errors")
-        }
-        logSyncResult(
-            folderPairId = folderPairId,
-            isSuccess = result.isSuccess,
-            message = logMessage,
-            details = if (result.errorMessages.isNotEmpty()) result.errorMessages.joinToString("\n") else null
-        )
+            // 2. Fetch remote items
+            val remoteListResult = cloudProvider.listFolder(folderPair.remoteFolderId, recursive = true)
+            if (remoteListResult.isFailure) {
+                val exception = remoteListResult.exceptionOrNull()
+                val errorMsg = "Failed to list remote folder '${folderPair.remoteFolderId}': ${exception?.message}"
+                logSyncResult(folderPairId, false, errorMsg)
+                if (exception is IOException) {
+                    throw exception // Propagate network error for worker retry
+                }
+                return@withContext SyncResult(
+                    folderPairId = folderPairId,
+                    startTimeMillis = System.currentTimeMillis(),
+                    endTimeMillis = System.currentTimeMillis(),
+                    isSuccess = false,
+                    errorCount = 1,
+                    errorMessages = listOf(errorMsg)
+                )
+            }
+            val remoteItems = mapRemoteItems(remoteListResult.getOrThrow(), folderPair.remoteFolderPath, pathFilter)
 
-        // 7. Trigger conflict alert notification if conflicts occurred
-        if (result.conflictCount > 0 && context != null) {
-            SyncNotificationManager.showConflictAlert(
-                context = context,
+            // 3. Load baseline snapshots
+            val baselineEntities = database.syncBaselineDao().getAllForFolderPair(folderPairId)
+            val baselineItems = mapBaselineItems(baselineEntities)
+
+            // 4. Plan reconciliation actions
+            val activeConflicts = database.syncConflictDao().getActiveConflicts(folderPairId)
+            val activeConflictPaths = activeConflicts.flatMap { conflict ->
+                val branchRel = try {
+                    File(conflict.conflictFilePath).relativeTo(localRoot).path.replace('\\', '/')
+                } catch (_: Exception) {
+                    ""
+                }
+                listOf(conflict.relativePath, branchRel)
+            }.filter { it.isNotBlank() }.toSet()
+
+            val plannedActions = ReconciliationPlanner.plan(
                 folderPairId = folderPairId,
-                fileName = folderPair.name,
-                conflictCount = result.conflictCount
+                localRoot = localRoot,
+                remoteFolderId = folderPair.remoteFolderId,
+                localItems = localItems,
+                remoteItems = remoteItems,
+                baselineItems = baselineItems,
+                syncDirection = folderPair.syncDirection,
+                activeConflictPaths = activeConflictPaths
             )
-        }
 
-        result
+            onProgress?.invoke(
+                "Syncing ${folderPair.name}",
+                "Executing ${plannedActions.size} actions...",
+                0,
+                plannedActions.size
+            )
+
+            // 5. Execute planned actions
+            val pipeline = SyncExecutionPipeline(database, cloudProvider)
+            val result = pipeline.execute(
+                folderPairId = folderPairId,
+                localRoot = localRoot,
+                remoteFolderId = folderPair.remoteFolderId,
+                plannedActions = plannedActions
+            )
+
+            // 6. Record audit log
+            val logMessage = buildString {
+                append("Sync finished: ")
+                append("${result.uploadedCount} uploaded, ")
+                append("${result.downloadedCount} downloaded, ")
+                append("${result.deletedLocalCount} local deleted, ")
+                append("${result.deletedRemoteCount} remote deleted, ")
+                append("${result.conflictCount} conflicts, ")
+                append("${result.errorCount} errors")
+            }
+            logSyncResult(
+                folderPairId = folderPairId,
+                isSuccess = result.isSuccess,
+                message = logMessage,
+                details = if (result.errorMessages.isNotEmpty()) result.errorMessages.joinToString("\n") else null
+            )
+
+            // 7. Trigger conflict alert notification if conflicts occurred
+            if (result.conflictCount > 0 && context != null) {
+                SyncNotificationManager.showConflictAlert(
+                    context = context,
+                    folderPairId = folderPairId,
+                    fileName = folderPair.name,
+                    conflictCount = result.conflictCount
+                )
+            }
+
+            result
+        }
     }
 
     /**
@@ -229,6 +231,12 @@ class SyncCoordinator(
     }
 
     companion object {
+        private val pairMutexes = ConcurrentHashMap<String, Mutex>()
+
+        private fun mutexFor(folderPairId: String): Mutex {
+            val newMutex = Mutex()
+            return pairMutexes.putIfAbsent(folderPairId, newMutex) ?: newMutex
+        }
 
         /**
          * Recursively scans the local directory, filtering out excluded patterns,
@@ -312,4 +320,3 @@ class SyncCoordinator(
         }
     }
 }
-

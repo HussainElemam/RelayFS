@@ -12,6 +12,7 @@ import io.relayfs.android.core.provider.CloudProvider
 import io.relayfs.android.core.provider.CloudProviderFactory
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,6 +34,11 @@ class SyncForegroundServiceTest {
         SyncForegroundService.customCloudProviderFactory = object : CloudProviderFactory {
             override suspend fun getProvider(accountId: String): CloudProvider = FakeServiceCloudProvider()
         }
+    }
+
+    @After
+    fun tearDown() {
+        SyncForegroundService.customCloudProviderFactory = null
     }
 
     @Test

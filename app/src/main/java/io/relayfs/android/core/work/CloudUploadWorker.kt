@@ -1,10 +1,10 @@
 package io.relayfs.android.core.work
 
 import android.content.Context
-import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -88,6 +88,8 @@ class CloudUploadWorker(
                 applicationContext.contentResolver.notifyChange(docUri, null)
                 applicationContext.contentResolver.notifyChange(parentUri, null)
 
+                runCatching { deleteSafStagingFile(localFile) }
+
                 Result.success()
             } else {
                 val error = uploadResult.exceptionOrNull()
@@ -103,6 +105,14 @@ class CloudUploadWorker(
             } else {
                 Result.failure()
             }
+        }
+    }
+
+    private fun deleteSafStagingFile(file: File) {
+        val stagingRoot = File(applicationContext.cacheDir, "saf_cache/staging").canonicalFile
+        val candidate = file.canonicalFile
+        if (candidate.parentFile == stagingRoot) {
+            candidate.delete()
         }
     }
 
@@ -144,8 +154,11 @@ class CloudUploadWorker(
                 )
                 .build()
 
-            WorkManager.getInstance(context).enqueue(workRequest)
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                "saf_upload_${accountId}_$documentId",
+                ExistingWorkPolicy.APPEND_OR_REPLACE,
+                workRequest
+            )
         }
     }
 }
-

@@ -12,11 +12,16 @@ import java.security.SecureRandom
  */
 object OAuthPkceHelper {
 
-    const val DEFAULT_REDIRECT_URI = "relayfs://oauth"
+    const val DEFAULT_REDIRECT_URI = "pcloud-oauth://io.relayfs.android"
     private const val PCLOUD_AUTHORIZE_URL = "https://my.pcloud.com/oauth2/authorize"
+    private const val STATE_PREFS = "pcloud_oauth_state"
+    private const val KEY_PENDING_STATE = "pending_state"
+    private const val KEY_PENDING_STATE_CREATED_AT = "pending_state_created_at"
+    private const val STATE_TTL_MILLIS = 10 * 60 * 1000L
 
     private val secureRandom = SecureRandom()
     private val base64UrlAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_".toCharArray()
+    private val stateLock = Any()
 
     /**
      * Generates a high-entropy cryptographic code verifier (RFC 7636 section 4.1).
@@ -31,6 +36,9 @@ object OAuthPkceHelper {
         }
         return String(chars)
     }
+
+    /** Generates a single-use OAuth state value used to bind a callback to this app session. */
+    fun generateState(length: Int = 64): String = generateCodeVerifier(length)
 
     /**
      * Computes the S256 code challenge for the given code verifier (RFC 7636 section 4.2).
@@ -51,7 +59,8 @@ object OAuthPkceHelper {
         clientId: String,
         codeChallenge: String? = null,
         redirectUri: String = DEFAULT_REDIRECT_URI,
-        responseType: String = if (codeChallenge != null) "code" else "token"
+        responseType: String = if (codeChallenge != null) "code" else "token",
+        state: String? = null
     ): String {
         val encodedRedirect = java.net.URLEncoder.encode(redirectUri, "UTF-8")
         val encodedClientId = java.net.URLEncoder.encode(clientId, "UTF-8")
@@ -60,6 +69,9 @@ object OAuthPkceHelper {
         if (responseType == "code" && !codeChallenge.isNullOrBlank()) {
             val encodedChallenge = java.net.URLEncoder.encode(codeChallenge, "UTF-8")
             sb.append("&code_challenge=$encodedChallenge&code_challenge_method=S256")
+        }
+        if (!state.isNullOrBlank()) {
+            sb.append("&state=${java.net.URLEncoder.encode(state, "UTF-8")}")
         }
         return sb.toString()
     }
@@ -74,7 +86,15 @@ object OAuthPkceHelper {
         redirectUri: String = DEFAULT_REDIRECT_URI,
         responseType: String = if (codeChallenge != null) "code" else "token"
     ) {
-        val authorizeUrl = buildAuthorizeUrl(clientId, codeChallenge, redirectUri, responseType)
+        val state = generateState()
+        savePendingState(context, state)
+        val authorizeUrl = buildAuthorizeUrl(
+            clientId = clientId,
+            codeChallenge = codeChallenge,
+            redirectUri = redirectUri,
+            responseType = responseType,
+            state = state
+        )
         val uri = Uri.parse(authorizeUrl)
 
         try {
@@ -88,6 +108,50 @@ object OAuthPkceHelper {
             }
             context.startActivity(browserIntent)
         }
+    }
+
+    fun savePendingState(context: Context, state: String) {
+        require(state.isNotBlank()) { "OAuth state must not be blank" }
+        synchronized(stateLock) {
+            val saved = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_PENDING_STATE, state)
+                .putLong(KEY_PENDING_STATE_CREATED_AT, System.currentTimeMillis())
+                .commit()
+            check(saved) { "Could not persist OAuth state" }
+        }
+    }
+
+    /** Validates and consumes a matching, non-expired OAuth state exactly once. */
+    fun validateAndConsumeState(context: Context, returnedState: String?): Boolean {
+        if (returnedState.isNullOrBlank()) return false
+        synchronized(stateLock) {
+            val prefs = context.getSharedPreferences(STATE_PREFS, Context.MODE_PRIVATE)
+            val expectedState = prefs.getString(KEY_PENDING_STATE, null) ?: return false
+            val createdAt = prefs.getLong(KEY_PENDING_STATE_CREATED_AT, 0L)
+            val age = System.currentTimeMillis() - createdAt
+            if (createdAt <= 0L || age < 0L || age > STATE_TTL_MILLIS) {
+                prefs.edit().clear().apply()
+                return false
+            }
+
+            val matches = MessageDigest.isEqual(
+                expectedState.toByteArray(Charsets.UTF_8),
+                returnedState.toByteArray(Charsets.UTF_8)
+            )
+            if (matches) {
+                prefs.edit().clear().apply()
+            }
+            return matches
+        }
+    }
+
+    fun isExpectedRedirectUri(uri: Uri): Boolean {
+        val expected = Uri.parse(DEFAULT_REDIRECT_URI)
+        return uri.scheme == expected.scheme &&
+            uri.host == expected.host &&
+            uri.port == expected.port &&
+            uri.path.orEmpty() == expected.path.orEmpty()
     }
 
     /**
@@ -137,4 +201,3 @@ object OAuthPkceHelper {
         )
     }
 }
-

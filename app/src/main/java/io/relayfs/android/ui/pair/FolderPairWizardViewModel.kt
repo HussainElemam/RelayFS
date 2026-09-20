@@ -96,8 +96,9 @@ class FolderPairWizardViewModel(
         _uiState.update { current ->
             when (current.currentStep) {
                 1 -> {
-                    if (current.localPath.isBlank()) {
-                        current.copy(errorMessage = "Please enter or select a valid local folder path")
+                    val pathError = validateLocalDirectory(current.localPath)
+                    if (pathError != null) {
+                        current.copy(errorMessage = pathError)
                     } else {
                         current.copy(currentStep = 2, errorMessage = null)
                     }
@@ -122,9 +123,14 @@ class FolderPairWizardViewModel(
 
     fun savePair(dispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO): kotlinx.coroutines.Job {
         val state = _uiState.value
+        val pathError = validateLocalDirectory(state.localPath)
+        if (pathError != null) {
+            _uiState.update { it.copy(errorMessage = pathError) }
+            return completedJob()
+        }
         if (state.name.isBlank()) {
             _uiState.update { it.copy(errorMessage = "Please specify a name for this folder pair") }
-            return kotlinx.coroutines.Job().apply { complete() }
+            return completedJob()
         }
 
         return viewModelScope.launch(dispatcher) {
@@ -156,6 +162,19 @@ class FolderPairWizardViewModel(
             }
         }
     }
+
+    private fun validateLocalDirectory(path: String): String? {
+        if (path.isBlank()) return "Please enter or select a valid local folder path"
+        val directory = File(path)
+        if (!directory.exists()) return "The selected local folder does not exist"
+        if (!directory.isDirectory) return "The selected local path is not a folder"
+        if (!directory.canRead() || !directory.canWrite()) {
+            return "RelayFS cannot read and write the selected local folder"
+        }
+        return null
+    }
+
+    private fun completedJob() = kotlinx.coroutines.Job().apply { complete() }
 
     class Factory(
         private val database: AppDatabase,

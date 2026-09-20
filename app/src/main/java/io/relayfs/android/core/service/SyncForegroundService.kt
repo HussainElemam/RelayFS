@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.content.ContextCompat
 import io.relayfs.android.core.database.AppDatabase
 import io.relayfs.android.core.provider.CloudProviderFactory
@@ -16,11 +17,13 @@ import io.relayfs.android.core.sync.engine.SyncCoordinator
 import io.relayfs.android.core.watcher.RecursiveFileWatcher
 import io.relayfs.android.core.watcher.debounce.DebounceEventQueue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Foreground Service (`foregroundServiceType="dataSync"`) responsible for:
@@ -35,7 +38,9 @@ class SyncForegroundService : Service() {
     private lateinit var database: AppDatabase
     private lateinit var coordinator: SyncCoordinator
     private val activeWatchers = mutableListOf<RecursiveFileWatcher>()
-    private var isWatcherModeActive: Boolean = false
+    private val activeSyncCount = AtomicInteger(0)
+    @Volatile private var isWatcherModeActive: Boolean = false
+    @Volatile private var isServiceDestroyed: Boolean = false
 
     override fun onCreate() {
         super.onCreate()
@@ -58,6 +63,7 @@ class SyncForegroundService : Service() {
 
         when (action) {
             ACTION_START_SYNC -> {
+                activeSyncCount.incrementAndGet()
                 serviceScope.launch {
                     try {
                         if (!folderPairId.isNullOrBlank()) {
@@ -69,8 +75,16 @@ class SyncForegroundService : Service() {
                                 updateNotification(title, detail, total, current)
                             }
                         }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Foreground sync failed", e)
+                        if (!isServiceDestroyed) {
+                            updateNotification("Sync failed", e.message ?: "Unexpected synchronization error", 0, 0)
+                        }
                     } finally {
-                        if (!isWatcherModeActive) {
+                        val remainingSyncs = activeSyncCount.decrementAndGet()
+                        if (remainingSyncs == 0 && !isWatcherModeActive && !isServiceDestroyed) {
                             stopForeground(STOP_FOREGROUND_REMOVE)
                             stopSelf(startId)
                         }
@@ -178,14 +192,17 @@ class SyncForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        isServiceDestroyed = true
         stopWatchingAll()
         serviceScope.cancel()
+        if (::database.isInitialized) database.close()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        private const val TAG = "SyncForegroundService"
         const val ACTION_START_SYNC = "io.relayfs.android.action.START_SYNC"
         const val ACTION_START_WATCHER = "io.relayfs.android.action.START_WATCHER"
         const val ACTION_STOP_SERVICE = "io.relayfs.android.action.STOP_SERVICE"
@@ -219,4 +236,3 @@ class SyncForegroundService : Service() {
         }
     }
 }
-

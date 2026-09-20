@@ -14,7 +14,6 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import okio.buffer
@@ -167,44 +166,31 @@ class PCloudApiClient(
         progress: ((bytesRead: Long, totalBytes: Long) -> Unit)? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val parent = destinationFile.parentFile ?: File(".")
-            if (!parent.exists()) {
-                parent.mkdirs()
-            }
-
-            val stagingFile = File(parent, ".${destinationFile.name}.sync_tmp")
-
             val request = Request.Builder()
                 .url(downloadUrl)
                 .get()
                 .build()
 
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                throw IOException("Download failed with HTTP ${response.code}: ${response.message}")
-            }
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("Download failed with HTTP ${response.code}: ${response.message}")
+                }
 
-            val body = response.body ?: throw IOException("Empty response body during file download")
-            val totalBytes = body.contentLength()
+                val body = response.body ?: throw IOException("Empty response body during file download")
+                val totalBytes = body.contentLength()
 
-            body.byteStream().use { input ->
-                FileOutputStream(stagingFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesCopied = 0L
-                    var read: Int
-
-                    while (input.read(buffer).also { read = it } != -1) {
-                        output.write(buffer, 0, read)
-                        bytesCopied += read
-                        progress?.invoke(bytesCopied, totalBytes)
-                    }
-                    output.flush()
-                    output.fd.sync()
+                body.byteStream().use { input ->
+                    io.relayfs.android.core.sync.io.AtomicFileWriter.write(
+                        destinationFile = destinationFile,
+                        source = input,
+                        expectedSize = totalBytes.takeIf { it >= 0L },
+                        onProgress = { bytesCopied ->
+                            progress?.invoke(bytesCopied, totalBytes)
+                        }
+                    )
                 }
             }
-
-            // Safe atomic file replacement with backup
-            io.relayfs.android.core.sync.io.AtomicFileWriter.safeReplace(stagingFile, destinationFile)
+            Unit
         }
     }
 

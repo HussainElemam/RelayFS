@@ -45,6 +45,10 @@ object AtomicFileWriter {
                     onProgress?.invoke(bytesWritten)
                 }
 
+                if (expectedSize != null && bytesWritten != expectedSize) {
+                    throw IOException("Expected $expectedSize bytes but received $bytesWritten")
+                }
+
                 output.flush()
                 output.fd.sync() // Force physical disk flush
             }
@@ -60,37 +64,25 @@ object AtomicFileWriter {
     }
 
     /**
-     * Safely replaces [destinationFile] with [stagingFile] using a temporary backup
-     * so that if the move or copy fails, the existing file is not corrupted or lost.
+     * Replaces [destinationFile] with [stagingFile] using the platform rename operation.
+     *
+     * Both files must be in the same directory. On Android/Linux this maps to rename(2),
+     * which atomically replaces an existing destination. If the rename cannot be completed,
+     * fail closed: never fall back to copying over the live destination.
      */
     fun safeReplace(stagingFile: File, destinationFile: File) {
-        val parent = destinationFile.parentFile ?: stagingFile.parentFile ?: File(".")
-        if (!destinationFile.exists()) {
-            if (!stagingFile.renameTo(destinationFile)) {
-                stagingFile.copyTo(destinationFile, overwrite = true)
-                stagingFile.delete()
-            }
-        } else {
-            val backupFile = File(parent, ".${destinationFile.name}.${System.nanoTime()}.bak")
-            val backupCreated = destinationFile.renameTo(backupFile)
-            if (backupCreated) {
-                val renamed = stagingFile.renameTo(destinationFile)
-                if (renamed) {
-                    backupFile.delete()
-                } else {
-                    try {
-                        stagingFile.copyTo(destinationFile, overwrite = true)
-                        stagingFile.delete()
-                        backupFile.delete()
-                    } catch (copyEx: Exception) {
-                        backupFile.renameTo(destinationFile)
-                        throw copyEx
-                    }
-                }
-            } else {
-                stagingFile.copyTo(destinationFile, overwrite = true)
-                stagingFile.delete()
-            }
+        require(stagingFile.exists()) { "Staging file does not exist: ${stagingFile.absolutePath}" }
+
+        val stagingParent = stagingFile.canonicalFile.parentFile
+        val destinationParent = destinationFile.canonicalFile.parentFile
+        require(stagingParent == destinationParent) {
+            "Atomic replacement requires staging and destination files in the same directory"
+        }
+
+        if (!stagingFile.renameTo(destinationFile)) {
+            throw IOException(
+                "Could not atomically replace ${destinationFile.absolutePath}; original file was left untouched"
+            )
         }
     }
 

@@ -10,6 +10,7 @@ import io.relayfs.android.core.sync.hash.FastHasher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 
 /**
  * Pipeline that safely executes planned [SyncAction]s, interacts with [CloudProvider],
@@ -328,9 +329,11 @@ class SyncExecutionPipeline(
                         currentParentId = existing.id
                         folderCache[currentPath] = currentParentId
                     } else {
-                        // In WebDAV or single-tier providers where folders are represented by path
-                        currentParentId = if (currentParentId.endsWith("/")) "$currentParentId$segment" else "$currentParentId/$segment"
-                        folderCache[currentPath] = currentParentId
+                        val cause = listResult.exceptionOrNull() ?: createResult.exceptionOrNull()
+                        throw IOException(
+                            "Could not create or resolve remote directory '$currentPath'",
+                            cause
+                        )
                     }
                 }
             }

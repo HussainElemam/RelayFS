@@ -20,6 +20,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -85,6 +86,9 @@ class ConflictCenterViewModelTest {
 
         val updated = database.syncConflictDao().getConflict("c1")
         assertEquals(ConflictStatus.RESOLVED_KEEP_LOCAL, updated?.status)
+        val baseline = database.syncBaselineDao().getBaseline(folderPairId, "notes.md")
+        assertEquals("Cloud Edit".length.toLong(), baseline?.remoteSizeBytes)
+        assertEquals(0L, baseline?.localSizeBytes)
     }
 
     @Test
@@ -112,6 +116,9 @@ class ConflictCenterViewModelTest {
 
         val updated = database.syncConflictDao().getConflict("c2")
         assertEquals(ConflictStatus.RESOLVED_KEEP_REMOTE, updated?.status)
+        val baseline = database.syncBaselineDao().getBaseline(folderPairId, "report.txt")
+        assertEquals("Fresh Cloud".length.toLong(), baseline?.remoteSizeBytes)
+        assertEquals(localFile.length(), baseline?.localSizeBytes)
     }
 
     @Test
@@ -138,6 +145,31 @@ class ConflictCenterViewModelTest {
 
         val updated = database.syncConflictDao().getConflict("c3")
         assertEquals(ConflictStatus.RESOLVED_KEEP_BOTH, updated?.status)
+        val baseline = database.syncBaselineDao().getBaseline(folderPairId, "essay.md")
+        assertEquals("Cloud Essay".length.toLong(), baseline?.remoteSizeBytes)
+        assertEquals(0L, baseline?.localSizeBytes)
+    }
+
+    @Test
+    fun testResolutionFailsSafelyWhenConflictCopyIsMissing() = runTest {
+        val localFile = tempFolder.newFile("missing-branch.md").apply { writeText("Local") }
+        val missingConflictFile = File(tempFolder.root, "missing-branch (conflict).md")
+        val conflict = SyncConflictEntity(
+            id = "c-missing",
+            folderPairId = folderPairId,
+            relativePath = "missing-branch.md",
+            localFilePath = localFile.absolutePath,
+            conflictFilePath = missingConflictFile.absolutePath,
+            localModifiedTimeMillis = localFile.lastModified(),
+            remoteModifiedTimeMillis = 123L,
+            status = ConflictStatus.ACTIVE
+        )
+        database.syncConflictDao().insert(conflict)
+
+        viewModel.resolveKeepLocal(conflict).join()
+
+        assertEquals(ConflictStatus.ACTIVE, database.syncConflictDao().getConflict(conflict.id)?.status)
+        assertTrue(localFile.exists())
+        assertTrue(viewModel.uiState.value.message?.contains("missing") == true)
     }
 }
-

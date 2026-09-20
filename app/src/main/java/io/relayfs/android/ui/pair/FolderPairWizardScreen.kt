@@ -1,5 +1,7 @@
 package io.relayfs.android.ui.pair
 
+import android.Manifest
+import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -182,6 +184,7 @@ fun StepOneLocalFolder(
     var hasStoragePermission by remember {
         mutableStateOf(StoragePermissionHelper.hasAllFilesAccess(context))
     }
+    var folderSelectionError by remember { mutableStateOf<String?>(null) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -201,17 +204,23 @@ fun StepOneLocalFolder(
         hasStoragePermission = StoragePermissionHelper.hasAllFilesAccess(context)
     }
 
+    val legacyPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        hasStoragePermission = StoragePermissionHelper.hasAllFilesAccess(context)
+    }
+
     val openDocumentTreeLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
         uri?.let {
-            try {
-                StoragePermissionHelper.takePersistablePermissions(context.contentResolver, it)
-            } catch (e: Exception) {
-                // Ignore failure to persist permissions
+            val resolvedPath = StoragePermissionHelper.resolveTreeUriToPath(it)
+            if (resolvedPath != null) {
+                folderSelectionError = null
+                onPathChanged(resolvedPath)
+            } else {
+                folderSelectionError = "This folder cannot be used as a raw filesystem path. Choose a folder on device storage."
             }
-            val resolvedPath = StoragePermissionHelper.resolveTreeUriToPath(it) ?: it.toString()
-            onPathChanged(resolvedPath)
         }
     }
 
@@ -259,8 +268,17 @@ fun StepOneLocalFolder(
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = {
-                        val intent = StoragePermissionHelper.createAllFilesAccessIntent(context)
-                        permissionLauncher.launch(intent)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            val intent = StoragePermissionHelper.createAllFilesAccessIntent(context)
+                            permissionLauncher.launch(intent)
+                        } else {
+                            legacyPermissionLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                )
+                            )
+                        }
                     },
                     modifier = Modifier.testTag("btn_grant_storage_permission")
                 ) {
@@ -277,34 +295,50 @@ fun StepOneLocalFolder(
         placeholder = { Text("/storage/emulated/0/Documents/Vault") },
         leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
         singleLine = true,
+        enabled = hasStoragePermission,
         modifier = Modifier
             .fillMaxWidth()
             .testTag("input_local_path")
     )
 
     // Quick presets and Browse button
+    OutlinedButton(
+        onClick = { openDocumentTreeLauncher.launch(null) },
+        enabled = hasStoragePermission,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("btn_browse_folder")
+    ) {
+        Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
+        Spacer(modifier = Modifier.width(6.dp))
+        Text("Browse Device Folders")
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        OutlinedButton(
-            onClick = { openDocumentTreeLauncher.launch(null) },
-            modifier = Modifier.testTag("btn_browse_folder")
-        ) {
-            Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("Browse")
-        }
         FilterChip(
             selected = false,
             onClick = { onPathChanged("$externalStoragePath/Documents/Obsidian") },
-            label = { Text("Documents/Obsidian") }
+            enabled = hasStoragePermission,
+            label = { Text("Documents/Obsidian") },
+            modifier = Modifier.weight(1f)
         )
         FilterChip(
             selected = false,
             onClick = { onPathChanged("$externalStoragePath/Documents/Notes") },
-            label = { Text("Documents/Notes") }
+            enabled = hasStoragePermission,
+            label = { Text("Documents/Notes") },
+            modifier = Modifier.weight(1f)
+        )
+    }
+
+    folderSelectionError?.let { message ->
+        Text(
+            text = message,
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.bodySmall
         )
     }
 
@@ -344,6 +378,7 @@ fun StepOneLocalFolder(
     Spacer(modifier = Modifier.height(16.dp))
     Button(
         onClick = onNext,
+        enabled = hasStoragePermission && localPath.isNotBlank(),
         modifier = Modifier
             .fillMaxWidth()
             .testTag("btn_next_step")
@@ -548,7 +583,7 @@ fun FolderPairWizardStep1Preview() {
         FolderPairWizardScreen(
             uiState = WizardUiState(
                 currentStep = 1,
-                localPath = "/sdcard/Documents/Obsidian",
+                localPath = "${Environment.getExternalStorageDirectory().absolutePath}/Documents/Obsidian",
                 isObsidianDetected = true
             ),
             onNameChanged = {},

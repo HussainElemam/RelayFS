@@ -18,7 +18,8 @@ import androidx.core.content.ContextCompat
  * Implements the permissions strategy:
  * 1. Primary: MANAGE_EXTERNAL_STORAGE (All Files Access) on Android 11+ (API 30+)
  *    providing raw POSIX java.io.File access and Linux inotify file monitoring.
- * 2. Fallback: Storage Access Framework (SAF) ACTION_OPEN_DOCUMENT_TREE.
+ * Folder selection may use SAF as a picker, but synchronization still requires raw filesystem
+ * access because the sync engine and file watcher operate on java.io.File paths.
  */
 object StoragePermissionHelper {
 
@@ -55,14 +56,7 @@ object StoragePermissionHelper {
     fun createAllFilesAccessIntent(context: Context): Intent {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val packageUri = Uri.parse("package:${context.packageName}")
-            val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri)
-            // Verify resolution; if not resolved, fall back to general screen
-            val pm = context.packageManager
-            if (intent.resolveActivity(pm) != null) {
-                intent
-            } else {
-                Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-            }
+            Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, packageUri)
         } else {
             Intent(
                 Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -72,8 +66,8 @@ object StoragePermissionHelper {
     }
 
     /**
-     * Creates an Intent for selecting a directory via Storage Access Framework (SAF)
-     * as a fallback when All Files Access is refused or unavailable.
+     * Creates an Intent for selecting a directory via Storage Access Framework (SAF).
+     * This is a picker only; its URI grant is not a replacement for raw filesystem access.
      */
     fun createDocumentTreeIntent(initialUri: Uri? = null): Intent {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
@@ -134,4 +128,3 @@ object StoragePermissionHelper {
         }
     }
 }
-

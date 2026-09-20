@@ -107,5 +107,18 @@ class FolderPairWizardViewModelTest {
         assertTrue(savedPair.isObsidianVault)
         assertTrue(savedPair.wifiOnly)
     }
-}
 
+    @Test
+    fun testNonexistentLocalFolderCannotAdvanceOrSave() = runTest {
+        val missing = File(tempFolder.root, "does-not-exist")
+        viewModel.updateLocalPath(missing.absolutePath)
+
+        viewModel.nextStep()
+        assertEquals(1, viewModel.uiState.value.currentStep)
+        assertTrue(viewModel.uiState.value.errorMessage?.contains("does not exist") == true)
+
+        viewModel.updateName("Invalid pair")
+        viewModel.savePair().join()
+        assertEquals(0, database.folderPairDao().getEnabledPairs().size)
+    }
+}
