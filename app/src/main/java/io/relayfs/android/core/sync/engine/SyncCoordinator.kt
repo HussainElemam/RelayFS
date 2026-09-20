@@ -271,17 +271,19 @@ class SyncCoordinator(
             remoteRootPath: String,
             pathFilter: PathFilter
         ): Map<String, RemoteItemSnapshot> {
-            val normalizedRoot = remoteRootPath.trimEnd('/')
+            val cleanRoot = remoteRootPath.trim().trim('/').replace('\\', '/')
             val result = mutableMapOf<String, RemoteItemSnapshot>()
 
             for (item in items) {
                 // Skip remote directories as synchronization reconciles file contents
                 if (item.isDirectory) continue
 
-                val relPath = if (normalizedRoot.isEmpty() || normalizedRoot == "/") {
-                    item.path.trimStart('/')
-                } else {
-                    item.path.removePrefix(normalizedRoot).trimStart('/')
+                val normalizedItemPath = item.path.trim().trimStart('/').replace('\\', '/')
+                val relPath = when {
+                    cleanRoot.isEmpty() -> normalizedItemPath
+                    normalizedItemPath.startsWith("$cleanRoot/") -> normalizedItemPath.removePrefix("$cleanRoot/")
+                    normalizedItemPath == cleanRoot -> ""
+                    else -> normalizedItemPath
                 }
 
                 if (relPath.isBlank() || pathFilter.shouldExclude(relPath)) continue

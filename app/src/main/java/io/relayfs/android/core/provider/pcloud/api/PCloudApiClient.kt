@@ -71,20 +71,21 @@ class PCloudApiClient(
                 .post(countingBody)
                 .build()
 
-            val response = okHttpClient.newCall(request).execute()
-            if (!response.isSuccessful) {
-                throw IOException("Single-part upload failed with HTTP ${response.code}: ${response.message}")
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("Single-part upload failed with HTTP ${response.code}: ${response.message}")
+                }
+
+                val bodyString = response.body?.string() ?: throw IOException("Empty response from uploadfile")
+                val uploadResponse = json.decodeFromString<PCloudUploadSaveResponse>(bodyString)
+
+                if (uploadResponse.result != 0) {
+                    throw IOException("pCloud upload error code ${uploadResponse.result}: ${uploadResponse.error}")
+                }
+
+                uploadResponse.metadata.firstOrNull()
+                    ?: throw IOException("No metadata returned after successful upload")
             }
-
-            val bodyString = response.body?.string() ?: throw IOException("Empty response from uploadfile")
-            val uploadResponse = json.decodeFromString<PCloudUploadSaveResponse>(bodyString)
-
-            if (uploadResponse.result != 0) {
-                throw IOException("pCloud upload error code ${uploadResponse.result}: ${uploadResponse.error}")
-            }
-
-            uploadResponse.metadata.firstOrNull()
-                ?: throw IOException("No metadata returned after successful upload")
         }
     }
 
@@ -125,15 +126,16 @@ class PCloudApiClient(
                         .post(chunkBody)
                         .build()
 
-                    val writeResponse = okHttpClient.newCall(writeRequest).execute()
-                    if (!writeResponse.isSuccessful) {
-                        throw IOException("upload_write at offset $offset failed with HTTP ${writeResponse.code}")
-                    }
+                    okHttpClient.newCall(writeRequest).execute().use { writeResponse ->
+                        if (!writeResponse.isSuccessful) {
+                            throw IOException("upload_write at offset $offset failed with HTTP ${writeResponse.code}")
+                        }
 
-                    val writeRespString = writeResponse.body?.string() ?: ""
-                    val baseResp = json.decodeFromString<PCloudBaseResponse>(writeRespString)
-                    if (baseResp.result != 0) {
-                        throw IOException("upload_write error code ${baseResp.result}: ${baseResp.error}")
+                        val writeRespString = writeResponse.body?.string() ?: ""
+                        val baseResp = json.decodeFromString<PCloudBaseResponse>(writeRespString)
+                        if (baseResp.result != 0) {
+                            throw IOException("upload_write error code ${baseResp.result}: ${baseResp.error}")
+                        }
                     }
 
                     offset += bytesRead

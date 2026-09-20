@@ -49,6 +49,11 @@ class SyncExecutionPipeline(
                         // Unchanged; no operation
                     }
 
+                    is SyncAction.PruneBaseline -> {
+                        // Deleted on both endpoints or absent on target; prune obsolete baseline entry
+                        baselineDao.deleteByPath(folderPairId, action.relativePath)
+                    }
+
                     is SyncAction.Upload -> {
                         val file = action.localItem.localFile
                         val relDir = action.relativePath.substringBeforeLast('/', "")

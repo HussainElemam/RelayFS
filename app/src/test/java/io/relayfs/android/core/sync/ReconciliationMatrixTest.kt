@@ -281,4 +281,57 @@ class ReconciliationMatrixTest {
         assertTrue(actions[0] is SyncAction.NoOp)
         assertEquals(path, actions[0].relativePath)
     }
+
+    @Test
+    fun testBothDeletedConcurrently_ProducesPruneBaseline() {
+        val path = "both_deleted.md"
+
+        val local = emptyMap<String, LocalItemSnapshot>()
+        val remote = emptyMap<String, RemoteItemSnapshot>()
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+
+        val actions = ReconciliationPlanner.plan(
+            folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline
+        )
+
+        assertEquals(1, actions.size)
+        assertTrue(actions[0] is SyncAction.PruneBaseline)
+        assertEquals(path, actions[0].relativePath)
+    }
+
+    @Test
+    fun testLocalToCloud_DeletedLocallyAndAbsentRemotely_ProducesPruneBaseline() {
+        val path = "stale_local_to_cloud.md"
+
+        val local = emptyMap<String, LocalItemSnapshot>()
+        val remote = emptyMap<String, RemoteItemSnapshot>()
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+
+        val actions = ReconciliationPlanner.plan(
+            folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
+            syncDirection = io.relayfs.android.core.model.SyncDirection.LOCAL_TO_CLOUD
+        )
+
+        assertEquals(1, actions.size)
+        assertTrue(actions[0] is SyncAction.PruneBaseline)
+        assertEquals(path, actions[0].relativePath)
+    }
+
+    @Test
+    fun testCloudToLocal_DeletedRemotelyAndAbsentLocally_ProducesPruneBaseline() {
+        val path = "stale_cloud_to_local.md"
+
+        val local = emptyMap<String, LocalItemSnapshot>()
+        val remote = emptyMap<String, RemoteItemSnapshot>()
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+
+        val actions = ReconciliationPlanner.plan(
+            folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
+            syncDirection = io.relayfs.android.core.model.SyncDirection.CLOUD_TO_LOCAL
+        )
+
+        assertEquals(1, actions.size)
+        assertTrue(actions[0] is SyncAction.PruneBaseline)
+        assertEquals(path, actions[0].relativePath)
+    }
 }

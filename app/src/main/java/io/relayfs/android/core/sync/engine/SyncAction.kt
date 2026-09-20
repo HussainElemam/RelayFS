@@ -87,4 +87,11 @@ sealed interface SyncAction {
         val remoteItem: RemoteItemSnapshot,
         val destinationFile: File
     ) : SyncAction
+
+    /**
+     * Item deleted on both endpoints or already absent on target. Prune baseline entry without data transfer.
+     */
+    data class PruneBaseline(
+        override val relativePath: String
+    ) : SyncAction
 }

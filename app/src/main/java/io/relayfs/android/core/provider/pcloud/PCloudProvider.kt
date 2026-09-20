@@ -250,6 +250,12 @@ class PCloudProvider(
 
             val body = response.body()
             if (!response.isSuccessful || body == null || body.result != 0) {
+                val pCloudResult = body?.result
+                // 2005: Directory does not exist, 2009: File not found, 2010: Invalid path/id, 404: HTTP Not Found
+                // Idempotent delete: if already deleted or missing on pCloud, treat as success
+                if (pCloudResult == 2005 || pCloudResult == 2009 || pCloudResult == 2010 || response.code() == 404) {
+                    return@runCatching
+                }
                 throw IOException("deleteItem failed: ${body?.error ?: response.message()}")
             }
         }
@@ -322,7 +328,8 @@ class PCloudProvider(
 
     companion object {
         fun parseFolderId(rawId: String): Long {
-            return rawId.removePrefix("d").toLongOrNull() ?: 0L
+            return rawId.removePrefix("d").toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid folder remote id: $rawId")
         }
 
         fun parseFileId(rawId: String): Long {
@@ -344,4 +351,3 @@ class PCloudProvider(
         }
     }
 }
-

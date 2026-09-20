@@ -92,14 +92,14 @@ object ReconciliationPlanner {
             }
             // Local deleted -> Delete remote (mirroring local deletion)
             deltaL == EndpointDelta.DELETED -> {
-                if (remote != null || baseline?.remoteId != null) {
+                if (remote != null) {
                     SyncAction.DeleteRemote(
                         path,
-                        remote?.remoteId ?: baseline?.remoteId ?: "",
-                        remote?.isDirectory ?: baseline?.isDirectory ?: false
+                        remote.remoteId,
+                        remote.isDirectory
                     )
                 } else {
-                    SyncAction.NoOp(path)
+                    SyncAction.PruneBaseline(path)
                 }
             }
             // Local unchanged, but remote was deleted -> Local is source of truth, restore to cloud
@@ -131,7 +131,7 @@ object ReconciliationPlanner {
                 if (local != null || destFile.exists()) {
                     SyncAction.DeleteLocal(path, local?.localFile ?: destFile)
                 } else {
-                    SyncAction.NoOp(path)
+                    SyncAction.PruneBaseline(path)
                 }
             }
             // Remote unchanged, but local was deleted or modified -> Cloud is source of truth, restore to local
@@ -226,12 +226,19 @@ object ReconciliationPlanner {
                 SyncAction.ConflictPreserveRemote(path, remote!!, destFile)
             }
 
+            // Both deleted concurrently -> Clean up obsolete baseline record
+            deltaL == EndpointDelta.DELETED && deltaR == EndpointDelta.DELETED -> {
+                SyncAction.PruneBaseline(path)
+            }
+
             // Fallback safety: if unknown combination, preserve local file
             else -> {
                 if (local != null) {
                     SyncAction.Upload(path, local, remoteFolderId)
                 } else if (remote != null) {
                     SyncAction.Download(path, remote, destFile)
+                } else if (baseline != null) {
+                    SyncAction.PruneBaseline(path)
                 } else {
                     SyncAction.NoOp(path)
                 }

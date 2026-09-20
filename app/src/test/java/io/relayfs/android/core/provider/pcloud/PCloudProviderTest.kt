@@ -380,6 +380,83 @@ class PCloudProviderTest {
     }
 
     @Test
+    fun testDeleteBlankRemoteIdIsNoOp() = runTest {
+        val result = provider.deleteItem("", isDirectory = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
+    fun testDeleteNonExistentFileReturnsSuccessIdempotent() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{ "result": 2009, "error": "File not found." }""")
+        )
+
+        val result = provider.deleteItem("f999", isDirectory = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun testDeleteNonExistentFolderReturnsSuccessIdempotent() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{ "result": 2005, "error": "Directory does not exist." }""")
+        )
+
+        val result = provider.deleteItem("d888", isDirectory = true)
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun testDeleteInvalidRemoteIdResponseReturnsSuccessIdempotent() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{ "result": 2010, "error": "Invalid file ID." }""")
+        )
+
+        val result = provider.deleteItem("f777", isDirectory = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun testDeleteHttp404ReturnsSuccessIdempotent() = runTest {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(404)
+                .setHeader("Content-Type", "application/json")
+                .setBody("""{ "result": 2009, "error": "Not Found" }""")
+        )
+
+        val result = provider.deleteItem("f777", isDirectory = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, server.requestCount)
+    }
+
+    @Test
+    fun testDeleteMalformedFolderIdFailsWithoutNetworkRequest() = runTest {
+        val result = provider.deleteItem("not-a-folder-id", isDirectory = true)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is IllegalArgumentException)
+        assertEquals(0, server.requestCount)
+    }
+
+    @Test
     fun testRateLimitRetry() = runTest {
         // Enqueue HTTP 429 then HTTP 200
         server.enqueue(
@@ -407,4 +484,3 @@ class PCloudProviderTest {
         assertEquals("https://api.pcloud.com", PCloudApiClient.getBaseUrlForLocation(999)) // default
     }
 }
-

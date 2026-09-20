@@ -223,6 +223,45 @@ class SyncExecutionPipelineTest {
     }
 
     @Test
+    fun blankRemoteIdPrunesBaselineWithoutCallingProvider() = runTest {
+        database.syncBaselineDao().upsert(
+            SyncBaselineEntity(folderPairId, "stale.md", "", 100L, 100L, 10L, 10L, "h")
+        )
+
+        val result = pipeline.execute(
+            folderPairId,
+            tempFolder.root,
+            "d0",
+            listOf(SyncAction.DeleteRemote("stale.md", "", false))
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(1, result.deletedRemoteCount)
+        assertTrue(fakeCloud.deletedRemoteIds.isEmpty())
+        assertNull(database.syncBaselineDao().getBaseline(folderPairId, "stale.md"))
+    }
+
+    @Test
+    fun pruneBaselineActionRemovesBaselineEntryDirectly() = runTest {
+        database.syncBaselineDao().upsert(
+            SyncBaselineEntity(folderPairId, "both_deleted.md", "f99", 100L, 100L, 10L, 10L, "h")
+        )
+
+        val result = pipeline.execute(
+            folderPairId,
+            tempFolder.root,
+            "d0",
+            listOf(SyncAction.PruneBaseline("both_deleted.md"))
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(0, result.deletedRemoteCount)
+        assertEquals(0, result.deletedLocalCount)
+        assertTrue(fakeCloud.deletedRemoteIds.isEmpty())
+        assertNull(database.syncBaselineDao().getBaseline(folderPairId, "both_deleted.md"))
+    }
+
+    @Test
     fun testExecuteNestedUploadCreatesRemoteDirectories() = runTest {
         val subDir = File(tempFolder.root, "Personal/Work").apply { mkdirs() }
         val nestedFile = File(subDir, "note.md").apply { writeText("Nested note") }

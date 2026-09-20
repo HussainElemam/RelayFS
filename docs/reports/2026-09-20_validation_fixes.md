@@ -1,7 +1,7 @@
 # RelayFS v1 Validation Findings and Fixes
 
 **Date:** 2026-09-20
-**Scope:** pCloud v1 synchronization, local storage safety, SAF caching, WebDAV deferral, build policy, regression coverage, and documentation consistency.
+**Scope:** pCloud v1 synchronization, reconciliation cleanup, local storage safety, SAF caching, WebDAV deferral, HTTP resource handling, build policy, regression coverage, and documentation consistency.
 
 ## Outcome
 
@@ -90,16 +90,60 @@ The identified implementation and documentation issues were corrected. RelayFS i
 - Parent-by-parent remote hierarchy creation is implemented by `SyncExecutionPipeline.resolveOrCreateRemoteDirectory`, which delegates each folder operation to the active provider. It is not a `PCloudProvider.ensureRemoteFolderPath` method.
 - Local scan protection is now implemented by the dedicated `LocalScanner` and `SyncException.LocalStorageUnavailable` types.
 
+### 8. Concurrent deletions left permanent baseline records
+
+**Severity:** Medium
+**Problem:** When the same path was already absent locally and remotely, reconciliation produced `NoOp`, so its Room baseline survived every later sync pass.
+
+**Fix:**
+
+- Added `SyncAction.PruneBaseline` and direct, counter-neutral execution in `SyncExecutionPipeline`.
+- Bidirectional `(DELETED, DELETED)` paths now prune their baseline.
+- One-way modes also prune when the authoritative deletion is already reflected at the target.
+- Validation found and corrected an inconsistency in the first local-to-cloud implementation: it still attempted a remote delete whenever the stale baseline contained an ID. The corrected branch uses the current remote snapshot, so an already-absent target is pruned without an API call even when the baseline ID is populated.
+
+**Regression coverage:** Concurrent bidirectional deletion, both one-way directions, and direct pipeline pruning.
+
+### 9. Remote deletion was not idempotent
+
+**Severity:** High
+**Problem:** pCloud “already absent” responses caused a failed sync and retained the baseline, producing an infinite retry loop.
+
+**Fix:**
+
+- `PCloudProvider.deleteItem` now treats pCloud results `2005`, `2009`, and `2010`, plus HTTP 404, as successful idempotent deletion.
+- Blank IDs remain a local no-op with no network request.
+- Invalid nonblank folder IDs now fail locally instead of being coerced to folder ID `0`, preventing malformed state from targeting the pCloud root.
+
+**Regression coverage:** Missing file, missing folder, invalid-ID response, HTTP 404, blank ID, and malformed local folder ID.
+
+### 10. Remote path prefix stripping was not boundary-aware
+
+**Severity:** High
+**Problem:** Plain string prefix removal could truncate a valid filename such as `Notes-todo.txt` when the configured remote root was `/Notes`.
+
+**Fix:** Remote paths are normalized and the root is removed only when the item equals the root or begins with the root plus `/`. Relative paths and similarly prefixed filenames remain intact.
+
+**Regression coverage:** Shared-name prefixes, nested descendants, provider-relative paths, directory skipping, and exclusions.
+
+### 11. Direct OkHttp upload responses were not always closed
+
+**Severity:** Medium
+**Problem:** Single-part and chunk-write HTTP failures could bypass body consumption and leave their response/socket resources open.
+
+**Fix:** Both direct pCloud upload call sites now scope responses with `use`, covering success, non-2xx responses, parse failures, and thrown exceptions. A source-wide search confirms every direct OkHttp execution in the active pCloud provider is scoped this way. WebDAV remains deferred and outside the v1 runtime.
+
 ## Verification Results
 
 | Check | Result |
 |---|---:|
-| Debug unit/Robolectric tests | 191 passed, 0 failed, 0 skipped |
-| Release unit/Robolectric tests | 178 passed, 0 failed, 0 skipped |
+| Debug unit/Robolectric tests | 202 passed, 0 failed, 0 skipped |
+| Release unit/Robolectric tests | 189 passed, 0 failed, 0 skipped |
 | Physical-device instrumentation | 2 passed on SM-A528B / Android 14 |
 | Android lint | 0 errors; 52 non-blocking warnings; policy warning removed |
 | Debug APK | Built successfully |
 | R8 release APK | Built successfully; unsigned as expected |
+| Installed-app smoke test | Debug APK installed; `MainActivity` cold-launched; process remained live; no `AndroidRuntime` error |
 | Kotlin compilation | No compiler warnings |
 | `git diff --check` | Clean |
 
