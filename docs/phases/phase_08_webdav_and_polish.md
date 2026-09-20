@@ -8,21 +8,20 @@
 
 ## 1. Phase Goal
 Finalize the application for general availability:
-1. Implement the generic **`WebDavProvider`** (RFC 4918) supporting Nextcloud, ownCloud, and NAS servers.
-2. Build an in-app side-by-side **Markdown Diff Viewer** for reviewing and resolving file conflicts.
-3. Establish ProGuard / R8 minimization rules and verify release build integrity.
-4. Execute comprehensive end-to-end integration tests.
+1. Build an in-app side-by-side **Markdown Diff Viewer** for reviewing and resolving file conflicts.
+2. Establish ProGuard / R8 minimization rules and verify release build integrity.
+3. Harden and verify native pCloud synchronization and error handling.
+4. Note on WebDAV: Generic WebDAV provider implementation is deferred to v2 so v1 focuses exclusively on native pCloud.
 
 ---
 
 ## 2. Detailed Task Checklist
 
 ### Task 2.1: Generic WebDAV Provider (`io.relayfs.android.core.provider.webdav`)
-- [x] Implement `WebDavProvider` implementing `CloudProvider`.
-- [x] Build XML parser for `PROPFIND` multi-status responses using `XmlPullParser`.
-- [x] Implement HTTP operations: `PROPFIND` (listing), `GET` (download), `PUT` (upload), `MOVE`, `DELETE`.
-- [x] Handle HTTP Basic and Digest authentication.
-- [x] Unit tests for WebDAV XML parsing and error status handling.
+> *Status: DEFERRED TO v2.* Base class and XML parser are retained in `core.provider.webdav` but marked `@Deprecated` for v1. No UI exposures.
+- [ ] Production WebDAV deployment (*Deferred to v2*)
+- [x] Initial RFC 4918 prototype & XML parser implemented
+- [x] Unit tests for WebDAV XML parsing passing
 
 ### Task 2.2: In-App Markdown Diff & Conflict Resolution UI (`io.relayfs.android.ui.diff`)
 - [x] Integrate a lightweight text diff algorithm (e.g. Myers diff).

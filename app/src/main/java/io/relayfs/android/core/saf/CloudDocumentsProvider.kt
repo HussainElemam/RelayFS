@@ -214,7 +214,7 @@ class CloudDocumentsProvider : DocumentsProvider() {
 
         if (!isWrite) {
             // Read-Only mode: ensure cached locally to support random seek
-            if (!cachedFile.exists() || cachedFile.length() == 0L) {
+            if (!cachedFile.exists() || (entity.sizeBytes > 0L && cachedFile.length() == 0L)) {
                 signal?.throwIfCanceled()
                 val provider = runBlocking(Dispatchers.IO) {
                     providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)

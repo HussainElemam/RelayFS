@@ -71,16 +71,16 @@ class SyncExecutionPipeline(
                                     folderPairId = folderPairId,
                                     relativePath = action.relativePath,
                                     remoteId = cloudItem.id,
-                                    localModifiedTimeMillis = file.lastModified(),
+                                    localModifiedTimeMillis = action.localItem.modifiedTimeMillis,
                                     remoteModifiedTimeMillis = cloudItem.modifiedTimeMillis,
-                                    localSizeBytes = file.length(),
+                                    localSizeBytes = action.localItem.sizeBytes,
                                     remoteSizeBytes = cloudItem.sizeBytes,
                                     contentHash = localHash,
                                     isDirectory = file.isDirectory
                                 )
                             )
                             uploaded++
-                            bytesTransferred += file.length()
+                            bytesTransferred += action.localItem.sizeBytes
                         } else {
                             errors++
                             errorMessages.add("Upload failed for ${action.relativePath}: ${uploadResult.exceptionOrNull()?.message}")
@@ -119,16 +119,21 @@ class SyncExecutionPipeline(
                     }
 
                     is SyncAction.DeleteRemote -> {
-                        val deleteResult = cloudProvider.deleteItem(
-                            remoteId = action.remoteId,
-                            isDirectory = action.isDirectory
-                        )
-                        if (deleteResult.isSuccess) {
+                        if (action.remoteId.isBlank()) {
                             baselineDao.deleteByPath(folderPairId, action.relativePath)
                             deletedRemote++
                         } else {
-                            errors++
-                            errorMessages.add("Delete remote failed for ${action.relativePath}: ${deleteResult.exceptionOrNull()?.message}")
+                            val deleteResult = cloudProvider.deleteItem(
+                                remoteId = action.remoteId,
+                                isDirectory = action.isDirectory
+                            )
+                            if (deleteResult.isSuccess) {
+                                baselineDao.deleteByPath(folderPairId, action.relativePath)
+                                deletedRemote++
+                            } else {
+                                errors++
+                                errorMessages.add("Delete remote failed for ${action.relativePath}: ${deleteResult.exceptionOrNull()?.message}")
+                            }
                         }
                     }
 
@@ -227,11 +232,11 @@ class SyncExecutionPipeline(
                                     folderPairId = folderPairId,
                                     relativePath = action.relativePath,
                                     remoteId = cloudItem.id,
-                                    localModifiedTimeMillis = file.lastModified(),
+                                    localModifiedTimeMillis = action.localItem.modifiedTimeMillis,
                                     remoteModifiedTimeMillis = cloudItem.modifiedTimeMillis,
-                                    localSizeBytes = file.length(),
+                                    localSizeBytes = action.localItem.sizeBytes,
                                     remoteSizeBytes = cloudItem.sizeBytes,
-                                    contentHash = FastHasher.hashFile(file),
+                                    contentHash = action.localItem.contentHash ?: FastHasher.hashFile(file),
                                     isDirectory = file.isDirectory
                                 )
                             )

@@ -237,6 +237,7 @@ class PCloudProvider(
         remoteId: String,
         isDirectory: Boolean
     ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (remoteId.isBlank()) return@withContext Result.success(Unit)
         runCatching {
             val isFolder = isDirectory || remoteId.startsWith("d")
             val response = if (isFolder) {

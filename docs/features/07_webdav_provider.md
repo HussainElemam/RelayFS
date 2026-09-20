@@ -2,11 +2,16 @@
 
 **Feature ID:** `FEAT-07`  
 **Related Components:** `core:provider`, `core:security`  
+**Status:** **DEFERRED TO v2** (RelayFS v1 focuses strictly on native pCloud integration)
 
 ---
 
+> [!NOTE]
+> **v2 Deferred Feature**
+> Generic WebDAV provider implementation (Nextcloud, ownCloud, Synology, generic NAS) is deferred to RelayFS v2. RelayFS v1 exclusively targets native pCloud REST API synchronization and SAF virtual cloud drive support for optimal battery efficiency, delta sync performance, and data integrity.
+
 ## 1. Overview & Objective
-While pCloud is the primary target provider, the `WebDavProvider` implements RFC 4918 WebDAV to enable two-way sync and virtual drive access for **Nextcloud**, **ownCloud**, **Synology NAS**, **QNAP**, and generic WebDAV servers.
+While pCloud is the primary target provider for v1, the `WebDavProvider` specification is retained here for the v2 roadmap to enable two-way sync and virtual drive access for **Nextcloud**, **ownCloud**, **Synology NAS**, **QNAP**, and generic WebDAV servers.
 
 ---
 

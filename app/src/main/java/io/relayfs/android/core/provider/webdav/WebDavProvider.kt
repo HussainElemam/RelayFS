@@ -8,6 +8,7 @@ import io.relayfs.android.core.provider.CloudProvider
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
@@ -25,7 +26,9 @@ import java.util.concurrent.TimeUnit
  * Generic WebDAV (RFC 4918) cloud provider implementation.
  *
  * Supports Nextcloud, ownCloud, Synology NAS, and other standard WebDAV servers.
+ * NOTE: Deferred to v2. RelayFS v1 focuses exclusively on native pCloud integration.
  */
+@Deprecated("WebDAV support is deferred to v2. RelayFS v1 focuses strictly on native pCloud integration.")
 class WebDavProvider(
     override val accountId: String,
     val serverUrl: String,
@@ -98,17 +101,17 @@ class WebDavProvider(
                 ?: throw IOException("Empty response body from PROPFIND")
 
             val resources = WebDavXmlParser.parseMultiStatus(responseBody)
-            val folderPath = URI(folderUrl).path.trimEnd('/')
+            val folderPath = extractPath(folderUrl).trimEnd('/')
 
             // Filter out the requested folder itself (self-reference)
             resources
                 .filter { resource ->
-                    val resourcePath = URI(resolveUrl(resource.href)).path.trimEnd('/')
+                    val resourcePath = extractPath(resolveUrl(resource.href)).trimEnd('/')
                     resourcePath != folderPath && resourcePath.isNotBlank()
                 }
                 .map { resource ->
                     val fullUrl = resolveUrl(resource.href)
-                    val canonicalPath = URI(fullUrl).path
+                    val canonicalPath = extractPath(fullUrl)
                     CloudItem(
                         id = canonicalPath,
                         parentId = remoteFolderId,
@@ -144,7 +147,7 @@ class WebDavProvider(
             val res = resources.firstOrNull() ?: throw IOException("No metadata returned for $remoteId")
 
             val fullUrl = resolveUrl(res.href)
-            val canonicalPath = URI(fullUrl).path
+            val canonicalPath = extractPath(fullUrl)
             CloudItem(
                 id = canonicalPath,
                 parentId = null,
@@ -186,28 +189,17 @@ class WebDavProvider(
             val body = response.body ?: throw IOException("Empty body downloading $remoteId")
             val totalBytes = body.contentLength()
 
-            val parent = destinationFile.parentFile ?: File(".")
-            if (!parent.exists()) parent.mkdirs()
-            val stagingFile = File(parent, ".${destinationFile.name}.sync_tmp")
-
             body.byteStream().use { input ->
-                FileOutputStream(stagingFile).use { output ->
-                    val buffer = ByteArray(8192)
-                    var bytesCopied = 0L
-                    var read: Int
-
-                    while (input.read(buffer).also { read = it } != -1) {
-                        output.write(buffer, 0, read)
-                        bytesCopied += read
+                io.relayfs.android.core.sync.io.AtomicFileWriter.write(
+                    destinationFile = destinationFile,
+                    source = input,
+                    expectedSize = totalBytes.takeIf { it >= 0L },
+                    onProgress = { bytesCopied ->
                         progress?.invoke(bytesCopied, totalBytes)
                     }
-                    output.flush()
-                    output.fd.sync()
-                }
+                )
             }
-
-            // Safe atomic file replacement with backup
-            io.relayfs.android.core.sync.io.AtomicFileWriter.safeReplace(stagingFile, destinationFile)
+            Unit
         }
     }
 
@@ -235,7 +227,7 @@ class WebDavProvider(
             }
 
             val etag = response.header("ETag")?.removeSurrounding("\"")
-            val canonicalPath = URI(uploadUrl).path
+            val canonicalPath = extractPath(uploadUrl)
 
             CloudItem(
                 id = canonicalPath,
@@ -269,7 +261,7 @@ class WebDavProvider(
                 throw IOException("MKCOL failed with HTTP ${response.code}: ${response.message}")
             }
 
-            val canonicalPath = URI(folderUrl).path
+            val canonicalPath = extractPath(folderUrl)
             CloudItem(
                 id = canonicalPath,
                 parentId = parentFolderId,
@@ -306,7 +298,7 @@ class WebDavProvider(
                 throw IOException("MOVE failed with HTTP ${response.code}: ${response.message}")
             }
 
-            val canonicalPath = URI(destinationUrl).path
+            val canonicalPath = extractPath(destinationUrl)
             CloudItem(
                 id = canonicalPath,
                 parentId = newParentFolderId,
@@ -374,6 +366,12 @@ class WebDavProvider(
         }
 
         return "${serverUrl.trimEnd('/')}/$remotePathOrUrl"
+    }
+
+    private fun extractPath(url: String): String {
+        return url.toHttpUrlOrNull()?.encodedPath
+            ?: runCatching { URI(url).path }.getOrNull()
+            ?: url
     }
 
     companion object {

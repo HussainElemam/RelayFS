@@ -74,7 +74,7 @@ The system is strictly divided into:
 * **FR-1.3 (Delta Sync via `diff`):** Utilize pCloud’s native `diff` endpoint with `diffid` tracking to fetch remote change feeds incrementally without scanning full directory trees.
 * **FR-1.4 (Persistent File IDs):** Utilize pCloud's persistent `fileid` integers to track remote renames and file moves without deleting and re-uploading content.
 * **FR-1.5 (Resumable Chunked Uploads):** For files $>5\text{ MB}$, execute multi-part uploads via `upload_create`, `upload_write`, and `upload_save` to enable resumption after connection drops.
-* **FR-1.6 (WebDAV Provider - Secondary):** Support RFC 4918 WebDAV endpoints with HTTP Basic/Digest authentication for Nextcloud, ownCloud, and generic NAS servers.
+* **FR-1.6 (WebDAV Provider - Deferred to v2):** Support RFC 4918 WebDAV endpoints with HTTP Basic/Digest authentication for Nextcloud, ownCloud, and generic NAS servers (Planned for v2 roadmap; v1 focuses strictly on native pCloud).
 
 ### 3.2 Two-Way Synchronization Engine (FR-2)
 * **FR-2.1 (Folder Pairs):** Allow users to configure multiple folder pairs mapping a remote cloud directory to a local Android filesystem directory.

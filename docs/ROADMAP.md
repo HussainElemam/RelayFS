@@ -15,14 +15,14 @@ This tracker maintains the live state of implementation across all development p
 | **Phase 5** | [Background Sync & WorkManager](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_05_background_sync_and_workmanager.md) | WorkManager periodic sync, ForegroundService (dataSync), battery handling | `COMPLETED` | Week 6 |
 | **Phase 6** | [Compose UI & Obsidian Presets](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_06_ui_dashboard_and_obsidian_mode.md) | Material 3 UI, Folder pair config, Obsidian auto-detection, Conflict Center | `COMPLETED` | Week 7–8 |
 | **Phase 7** | [DocumentsProvider Virtual Drive](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_07_documents_provider.md) | SAF DocumentsProvider, SQLite metadata cache, seekable PFD, OnClose upload | `COMPLETED` | Week 9–10 |
-| **Phase 8** | [WebDAV Provider & Polish](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_08_webdav_and_polish.md) | Generic WebDAV, in-app Markdown diff view, release preparation | `COMPLETED` | Week 11 |
+| **Phase 8** | [Diff Viewer, Polish & Release Prep](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_08_webdav_and_polish.md) | In-app Markdown diff view, release preparation (WebDAV deferred to v2) | `COMPLETED` | Week 11 |
 
 ---
 
 ## All Phases Completed! (Phases 1 - 8)
 
-> **Milestone Achieved:** All 8 phases of RelayFS are fully implemented, verified, and release-ready.  
-> Both pCloud and generic WebDAV providers, 3-way sync engine, real-time filesystem watchers, background WorkManager sync, Jetpack Compose Material 3 UI, SAF DocumentsProvider virtual drive, in-app Markdown diff viewer, and ProGuard/R8 release optimization are production ready.
+> **Milestone Achieved:** RelayFS v1 is fully implemented, verified, and release-ready.  
+> Native pCloud provider, 3-way sync engine, real-time filesystem watchers, background WorkManager sync, Jetpack Compose Material 3 UI, SAF DocumentsProvider virtual drive, in-app Markdown diff viewer, and ProGuard/R8 release optimization are production ready. Generic WebDAV support is intentionally deferred to v2 to ensure maximum stability and reliability for v1.
 
 ---
 
@@ -83,8 +83,8 @@ This tracker maintains the live state of implementation across all development p
 - [x] `openDocument("w")` using `ParcelFileDescriptor.OnCloseListener` for cloud upload
 - [x] Document thumbnails via pCloud thumbnail API
 
-### Phase 8: WebDAV Provider & Polish
-- [x] Generic RFC 4918 WebDAV provider implementation
+### Phase 8: Diff Viewer, Polish & Release Prep
+- [ ] Generic RFC 4918 WebDAV provider (*Deferred to v2*)
 - [x] In-app side-by-side Markdown diff viewer
 - [x] End-to-end integration tests
 - [x] ProGuard / R8 rules verification and release APK build

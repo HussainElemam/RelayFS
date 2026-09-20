@@ -100,6 +100,7 @@ dependencies {
     testImplementation(libs.mockwebserver)
     testImplementation(libs.androidx.work.testing)
     testImplementation(libs.androidx.compose.ui.test.junit4)
+    testImplementation(libs.androidx.compose.ui.test.manifest)
 
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -107,4 +108,9 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+tasks.matching { it.name == "testReleaseUnitTest" }.configureEach {
+    // Compose createComposeRule relies on ComponentActivity, which is only present in debug builds
+    (this as? Test)?.exclude("**/*ScreenTest*")
 }
