@@ -24,14 +24,6 @@ class PowerManagementHelperTest {
     }
 
     @Test
-    fun testCreateRequestIgnoreBatteryOptimizationsIntent() {
-        val intent = PowerManagementHelper.createRequestIgnoreBatteryOptimizationsIntent(context)
-
-        assertEquals(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, intent.action)
-        assertEquals("package:${context.packageName}", intent.dataString)
-    }
-
-    @Test
     fun testCreateBatteryOptimizationSettingsIntent() {
         val intent = PowerManagementHelper.createBatteryOptimizationSettingsIntent()
 
@@ -46,4 +38,3 @@ class PowerManagementHelperTest {
         assertEquals(!isIgnoring, shouldPrompt)
     }
 }
-

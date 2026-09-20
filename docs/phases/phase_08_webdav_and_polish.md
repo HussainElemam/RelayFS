@@ -1,4 +1,4 @@
-# Phase 8: WebDAV Provider, Diff Viewer & Release Readiness
+# Phase 8: Diff Viewer, pCloud Polish & Release Readiness
 
 **Phase Status:** `COMPLETED`  
 **Estimated Effort:** 4–6 Days  
@@ -42,10 +42,10 @@ Finalize the application for general availability:
 ---
 
 ## 3. Acceptance Criteria
-1. Users can add and sync generic WebDAV accounts (Nextcloud, ownCloud).
+1. WebDAV has no v1 UI or runtime provider route; its prototype remains isolated for the v2 roadmap.
 2. The in-app diff viewer renders clear visual comparisons of conflicting Markdown notes.
-3. Release APK compiles with R8 full mode enabled with zero crashes.
-4. 100% test pass rate across the entire project test suite.
+3. The unsigned release APK compiles with R8 full mode and the debug APK passes a physical-device launch smoke test.
+4. Debug and release unit suites, lint, and the available device instrumentation suite pass before testing handoff.
 
 ---
 
@@ -65,4 +65,3 @@ Finalize the application for general availability:
 1. Ensure all tests pass.
 2. Update checklist in this document and `docs/ROADMAP.md`.
 3. Provide final release summary to user.
-

@@ -21,8 +21,8 @@ This tracker maintains the live state of implementation across all development p
 
 ## All Phases Completed! (Phases 1 - 8)
 
-> **Milestone Achieved:** RelayFS v1 is fully implemented, verified, and release-ready.  
-> Native pCloud provider, 3-way sync engine, real-time filesystem watchers, background WorkManager sync, Jetpack Compose Material 3 UI, SAF DocumentsProvider virtual drive, in-app Markdown diff viewer, and ProGuard/R8 release optimization are production ready. Generic WebDAV support is intentionally deferred to v2 to ensure maximum stability and reliability for v1.
+> **Milestone Achieved:** RelayFS v1 is feature-complete and ready for controlled pCloud validation.
+> Native pCloud, the 3-way sync engine, filesystem watchers, WorkManager, Compose UI, SAF virtual drive, conflict diff viewer, and R8 builds are implemented. Live-account acceptance testing and release signing remain explicit pre-release gates. Generic WebDAV is deferred to v2.
 
 ---
 
@@ -65,7 +65,7 @@ This tracker maintains the live state of implementation across all development p
 - [x] Periodic sync scheduling (configurable 15m to 24h)
 - [x] `SyncForegroundService` for real-time sync with `foregroundServiceType="dataSync"`
 - [x] Ongoing notification with progress updates (`POST_NOTIFICATIONS`)
-- [x] Battery optimization exemption prompt (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`)
+- [x] Battery-optimization guidance via Android system settings (no restricted direct-exemption permission)
 
 ### Phase 6: Jetpack Compose UI & Obsidian Presets
 - [x] Main Dashboard with sync status and manual "Sync Now" trigger
@@ -86,6 +86,5 @@ This tracker maintains the live state of implementation across all development p
 ### Phase 8: Diff Viewer, Polish & Release Prep
 - [ ] Generic RFC 4918 WebDAV provider (*Deferred to v2*)
 - [x] In-app side-by-side Markdown diff viewer
-- [x] End-to-end integration tests
+- [x] JVM/Robolectric integration suite and physical-device launch smoke test
 - [x] ProGuard / R8 rules verification and release APK build
-

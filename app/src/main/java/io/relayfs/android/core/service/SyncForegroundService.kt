@@ -162,16 +162,7 @@ class SyncForegroundService : Service() {
                     }
                 )
 
-                val watcher = RecursiveFileWatcher(
-                    rootDir = root,
-                    observerFactory = { dir, mask, onEvent ->
-                        object : android.os.FileObserver(dir.absolutePath, mask) {
-                            override fun onEvent(event: Int, path: String?) {
-                                onEvent(event, path)
-                            }
-                        }
-                    }
-                )
+                val watcher = RecursiveFileWatcher(rootDir = root)
 
                 debounceQueue.attachToWatcher(watcher)
                 watcher.startWatching()

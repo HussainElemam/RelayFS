@@ -10,7 +10,6 @@ import io.relayfs.android.core.model.SyncResult
 import io.relayfs.android.core.provider.CloudProvider
 import io.relayfs.android.core.provider.CloudProviderFactory
 import io.relayfs.android.core.service.SyncNotificationManager
-import io.relayfs.android.core.sync.hash.FastHasher
 import io.relayfs.android.core.watcher.filter.PathFilter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -64,8 +63,13 @@ class SyncCoordinator(
             }
 
             val localRoot = File(folderPair.localPath)
-            if (!localRoot.exists() || !localRoot.isDirectory) {
-                val errorMsg = "Local directory does not exist or is invalid: ${folderPair.localPath}"
+            val localRootIsReadable = try {
+                localRoot.exists() && localRoot.isDirectory && localRoot.canRead()
+            } catch (_: SecurityException) {
+                false
+            }
+            if (!localRootIsReadable) {
+                val errorMsg = "Local directory is unavailable or unreadable: ${folderPair.localPath}"
                 logSyncResult(folderPairId, false, errorMsg)
                 return@withContext SyncResult(
                     folderPairId = folderPairId,
@@ -94,7 +98,20 @@ class SyncCoordinator(
             onProgress?.invoke("Syncing ${folderPair.name}", "Scanning files...", 0, 0)
 
             // 1. Scan local items
-            val localItems = scanLocalFiles(localRoot, pathFilter)
+            val localItems = try {
+                scanLocalFiles(localRoot, pathFilter)
+            } catch (e: SyncException.LocalStorageUnavailable) {
+                val errorMsg = e.message ?: "Local storage became unavailable during scanning"
+                logSyncResult(folderPairId, false, errorMsg)
+                return@withContext SyncResult(
+                    folderPairId = folderPairId,
+                    startTimeMillis = System.currentTimeMillis(),
+                    endTimeMillis = System.currentTimeMillis(),
+                    isSuccess = false,
+                    errorCount = 1,
+                    errorMessages = listOf(errorMsg)
+                )
+            }
 
             // 2. Fetch remote items
             val remoteListResult = cloudProvider.listFolder(folderPair.remoteFolderId, recursive = true)
@@ -243,27 +260,7 @@ class SyncCoordinator(
          * and returns a map of canonical relative paths to [LocalItemSnapshot].
          */
         fun scanLocalFiles(localRoot: File, pathFilter: PathFilter): Map<String, LocalItemSnapshot> {
-            if (!localRoot.exists() || !localRoot.isDirectory) return emptyMap()
-
-            val result = mutableMapOf<String, LocalItemSnapshot>()
-            localRoot.walkTopDown().forEach { file ->
-                if (file == localRoot) return@forEach
-                val relPath = file.relativeTo(localRoot).path.replace('\\', '/')
-                if (pathFilter.shouldExclude(relPath)) return@forEach
-
-                // We record all non-excluded files (directories are structural)
-                if (file.isFile) {
-                    result[relPath] = LocalItemSnapshot(
-                        relativePath = relPath,
-                        localFile = file,
-                        sizeBytes = file.length(),
-                        modifiedTimeMillis = file.lastModified(),
-                        contentHash = FastHasher.hashFile(file),
-                        isDirectory = false
-                    )
-                }
-            }
-            return result
+            return LocalScanner.scan(localRoot, pathFilter)
         }
 
         /**

@@ -123,11 +123,9 @@ In Android 14 (API 34+), foreground services must declare a specific `foreground
      ```
   2. If false, display an educational card in the app settings:
      *"To allow reliable background syncing when your screen is off, disable battery optimization for RelayFS."*
-  3. Launch system exemption intent:
+  3. Open Android's battery-optimization settings for an explicit user choice:
      ```kotlin
-     val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
-         data = Uri.parse("package:${context.packageName}")
-     }
+     val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
      context.startActivity(intent)
      ```
-
+     RelayFS does not request `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, avoiding the restricted direct-exemption flow and its Play policy risk.

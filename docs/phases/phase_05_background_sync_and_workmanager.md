@@ -39,10 +39,10 @@ Ensure reliable, battery-efficient background synchronization:
   * Builds and updates notifications with current file name, progress bar, and transfer speed.
   * Handles conflict alert notifications (`sync_alerts` channel).
 
-### Task 2.4: Battery Optimization Exemption (`io.relayfs.android.core.power`)
+### Task 2.4: Battery Optimization Guidance (`io.relayfs.android.core.power`)
 - [x] Implement `PowerManagementHelper`:
   * Checks `PowerManager.isIgnoringBatteryOptimizations()`.
-  * Constructs system intent for `Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
+  * Opens `Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS` for an explicit user choice without requesting the restricted direct-exemption permission.
 
 ### Task 2.5: Automated Worker Tests
 - [x] Implement `SyncWorkerTest` using `WorkManagerTestInitHelper`:
@@ -72,4 +72,3 @@ Ensure reliable, battery-efficient background synchronization:
 1. Ensure WorkManager tests pass.
 2. Update checklist in this document and `docs/ROADMAP.md`.
 3. Report results to user and **STOP** for review.
-

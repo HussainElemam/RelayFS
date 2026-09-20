@@ -33,7 +33,7 @@ RelayFS follows **Clean Architecture** combined with **Agentic Engineering Best 
                        │                                │
         ┌──────────────▼────────────────┐    ┌──────────▼────────────────────┐
         │   Database & Storage Layer    │    │   Cloud Provider Layer        │
-        │   Room (SQLite), Filesystem   │    │   pCloud REST, Generic WebDAV │
+        │   Room (SQLite), Filesystem   │    │ pCloud REST (WebDAV in v2)    │
         └───────────────────────────────┘    └───────────────────────────────┘
 ```
 
@@ -41,7 +41,7 @@ RelayFS follows **Clean Architecture** combined with **Agentic Engineering Best 
 1. `core:model`: Immutable domain entities (`CloudAccount`, `CloudItem`, `SyncPair`, `SyncConflict`, `SyncResult`).
 2. `core:database`: Room SQLite database entities, DAOs, and migrations (`AppDatabase`, `FolderPairDao`, `SyncBaselineDao`, `SyncConflictDao`).
 3. `core:security`: Android Keystore integration and `EncryptedSharedPreferences` for token protection.
-4. `core:provider`: `CloudProvider` interface contract and implementations (`PCloudProvider`, `WebDavProvider`).
+4. `core:provider`: `CloudProvider` contract and the v1 runtime `PCloudProvider`; the deprecated `WebDavProvider` prototype is retained but runtime-isolated until v2.
 5. `core:sync`: Fast content hashing (`xxHash64`), 3-way reconciliation state machine, non-destructive conflict branching, and atomic file writers.
 6. `core:watcher`: Recursive Linux `inotify` file watcher (`FileObserver`) with Coroutine-based debouncing.
 7. `core:work`: AndroidX `WorkManager` workers, background periodic scheduling, and Foreground Service management.
@@ -108,4 +108,3 @@ sequenceDiagram
     end
     App->>App: Reads and seeks within file
 ```
-

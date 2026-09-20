@@ -95,6 +95,40 @@ class SyncExecutionPipelineTest {
     }
 
     @Test
+    fun uploadBaselineUsesScanSnapshotWhenFileChangesDuringUpload() = runTest {
+        val localFile = tempFolder.newFile("changing-note.md")
+        localFile.writeText("scanned content")
+        val scannedSize = localFile.length()
+        val scannedModified = localFile.lastModified()
+        val scannedHash = "scanned-hash"
+        fakeCloud.onUpload = { uploadedFile ->
+            uploadedFile.writeText("content changed while upload was in progress")
+            uploadedFile.setLastModified(scannedModified + 10_000L)
+        }
+
+        val action = SyncAction.Upload(
+            relativePath = "changing-note.md",
+            localItem = LocalItemSnapshot(
+                "changing-note.md",
+                localFile,
+                scannedSize,
+                scannedModified,
+                scannedHash
+            ),
+            parentFolderId = "d0"
+        )
+
+        val result = pipeline.execute(folderPairId, tempFolder.root, "d0", listOf(action))
+        val baseline = database.syncBaselineDao().getBaseline(folderPairId, "changing-note.md")
+
+        assertTrue(result.isSuccess)
+        assertEquals(scannedSize, baseline?.localSizeBytes)
+        assertEquals(scannedModified, baseline?.localModifiedTimeMillis)
+        assertEquals(scannedHash, baseline?.contentHash)
+        assertTrue(localFile.length() != scannedSize)
+    }
+
+    @Test
     fun testExecuteDownloadAction() = runTest {
         val destFile = File(tempFolder.root, "remote_note.md")
         fakeCloud.filesToDownload["f100"] = "Downloaded remote text"
@@ -251,6 +285,7 @@ private class FakeCloudProvider : CloudProvider {
     val filesToDownload = mutableMapOf<String, String>()
     val deletedRemoteIds = mutableListOf<String>()
     var failFolderCreation = false
+    var onUpload: ((File) -> Unit)? = null
 
     override suspend fun verifyConnection(): Result<CloudAccount> = Result.success(
         CloudAccount(accountId, ProviderType.PCLOUD, "test@example.com", "test", "https://api.pcloud.com")
@@ -281,6 +316,7 @@ private class FakeCloudProvider : CloudProvider {
     ): Result<CloudItem> {
         uploadedFiles.add(file.name)
         uploadTargets.add(parentFolderId to remoteName)
+        onUpload?.invoke(file)
         return Result.success(
             CloudItem("f_${file.name}", parentFolderId, remoteName, "/$remoteName", false, file.length(), file.lastModified())
         )

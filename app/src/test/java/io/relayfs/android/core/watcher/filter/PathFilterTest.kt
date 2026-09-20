@@ -49,6 +49,17 @@ class PathFilterTest {
         assertTrue(filter.shouldExclude("data.tmp"))
         assertTrue(filter.shouldExclude("notes.md~"))
         assertTrue(filter.shouldExclude("draft.txt~"))
+        assertTrue(filter.shouldExclude(".note.md.550e8400-e29b-41d4-a716-446655440000.resolved"))
+        assertTrue(filter.shouldExclude(".note.md.550e8400-e29b-41d4-a716-446655440000.replacement"))
+        assertTrue(filter.shouldExclude(".note.md.550e8400-e29b-41d4-a716-446655440000.original"))
+    }
+
+    @Test
+    fun shouldExclude_legitimateConflictLikeExtensions_returnsFalse() {
+        assertFalse(filter.shouldExclude("draft.original"))
+        assertFalse(filter.shouldExclude("migration.replacement"))
+        assertFalse(filter.shouldExclude("notes.resolved"))
+        assertFalse(filter.shouldExclude(".notes.original"))
     }
 
     @Test
@@ -97,4 +108,3 @@ class PathFilterTest {
         assertFalse(filter.shouldExclude(regularFile, rootDir))
     }
 }
-

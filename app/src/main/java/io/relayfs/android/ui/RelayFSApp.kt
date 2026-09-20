@@ -99,13 +99,8 @@ fun RelayFSApp(
                     onDeletePair = { pairId -> dashboardViewModel.deletePair(pairId) },
                     onAddPairClicked = { navController.navigate(Screen.FolderPairWizard.route) },
                     onBatteryOptimizeClicked = {
-                        try {
-                            val intent = PowerManagementHelper.createRequestIgnoreBatteryOptimizationsIntent(context)
-                            context.startActivity(intent)
-                        } catch (_: Exception) {
-                            val fallback = PowerManagementHelper.createBatteryOptimizationSettingsIntent()
-                            context.startActivity(fallback)
-                        }
+                        val intent = PowerManagementHelper.createBatteryOptimizationSettingsIntent()
+                        context.startActivity(intent)
                     },
                     onDismissBatteryBanner = { dashboardViewModel.dismissBatteryBanner() }
                 )
@@ -203,4 +198,3 @@ fun RelayFSApp(
         }
     }
 }
-

@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
+@Suppress("DEPRECATION")
 class WebDavProviderTest {
 
     @get:Rule
@@ -236,4 +237,3 @@ class WebDavProviderTest {
         assertFalse(result.isSuccess)
     }
 }
-

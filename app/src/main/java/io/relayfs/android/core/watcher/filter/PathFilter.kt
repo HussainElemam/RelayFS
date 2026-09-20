@@ -56,7 +56,7 @@ class PathFilter(
         if (fileName.endsWith(".sync_tmp")) return true
         if (fileName.endsWith(".tmp")) return true
         if (fileName.endsWith("~")) return true
-        if (fileName.endsWith(".resolved") || fileName.endsWith(".replacement") || fileName.endsWith(".original")) return true
+        if (CONFLICT_TEMP_FILE.matches(fileName)) return true
         if (fileName == ".DS_Store") return true
         if (fileName.equals("desktop.ini", ignoreCase = true)) return true
         if (fileName == "workspace.json" && normalizedPath.contains(".obsidian")) return true
@@ -71,6 +71,10 @@ class PathFilter(
     }
 
     companion object {
+        private val CONFLICT_TEMP_FILE = Regex(
+            """^\..+\.[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.(resolved|replacement|original)$"""
+        )
+
         /**
          * Default exclusions per RelayFS specification:
          * - Obsidian workspace & caches (frequently updated UI state)
@@ -160,4 +164,3 @@ class PathFilter(
         }
     }
 }
-

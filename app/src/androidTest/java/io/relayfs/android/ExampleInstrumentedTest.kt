@@ -1,5 +1,6 @@
 package io.relayfs.android
 
+import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.ext.junit.runners.AndroidJUnit4
 
@@ -20,5 +21,15 @@ class ExampleInstrumentedTest {
         // Context of the app under test.
         val appContext = InstrumentationRegistry.getInstrumentation().targetContext
         assertEquals("io.relayfs.android", appContext.packageName)
+    }
+
+    @Test
+    fun mainActivityLaunchesAndReachesResumedState() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            scenario.onActivity { activity ->
+                assertFalse(activity.isFinishing)
+                assertFalse(activity.isDestroyed)
+            }
+        }
     }
 }

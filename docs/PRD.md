@@ -23,7 +23,7 @@ Cloud storage services like **pCloud** offer desktop users (on Linux/Fedora, mac
 
 ### 1.3 Target Audience & Personas
 * **The Obsidian/PKM User:** Needs their Markdown vault kept synchronized between Linux/Fedora and Android without paying for proprietary sync subscriptions or running 24/7 home servers.
-* **The Privacy-Conscious Cloud User:** Uses pCloud, Nextcloud, or WebDAV for data ownership and refuses to store credentials in closed-source, ad-supported sync utilities.
+* **The Privacy-Conscious Cloud User:** Uses pCloud in v1 (with WebDAV planned for v2) and refuses to store credentials in closed-source, ad-supported sync utilities.
 * **The Power User:** Demands fine-grained control over sync frequency, Wi-Fi constraints, conflict handling, and system-level file picker access.
 
 ---
@@ -33,7 +33,7 @@ Cloud storage services like **pCloud** offer desktop users (on Linux/Fedora, mac
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                             Cloud Providers                                 │
-│                   [ pCloud REST API ]     [ Generic WebDAV ]                │
+│                   [ pCloud REST API ]   [ WebDAV: v2 only ]                 │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │
 ┌──────────────────────────────────────▼──────────────────────────────────────┐
@@ -143,12 +143,12 @@ The system is strictly divided into:
 | `INTERNET` / `ACCESS_NETWORK_STATE` | Required to communicate with cloud APIs and monitor network type (Wi-Fi vs. cellular). | Essential; app cannot function without it. |
 | `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC` | Required for long-running sync operations and continuous file watching in Android 14+. | WorkManager periodic jobs only. |
 | `POST_NOTIFICATIONS` | Required on Android 13+ to display sync progress notifications and conflict alerts. | Silent sync; conflicts visible only in in-app dashboard. |
-| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | Required on aggressive OEM skins (Samsung, Xiaomi) to prevent killing background sync. | Prompt user with direct link to system settings if sync delays are detected. |
+
+RelayFS does not request the restricted direct battery-exemption permission. It detects battery restrictions and opens Android's battery-optimization settings for an explicit user choice; WorkManager otherwise continues within Doze and App Standby constraints.
 
 ---
 
 ## 6. Out of Scope (Initial Release)
 * **pCloud Crypto Folder Decryption:** Client-side zero-knowledge encryption requires embedding custom C/C++ crypto routines; deferred to a future crypto add-on.
-* **Interactive In-App 3-Way Text Diff Merge Tool:** The initial version will branch conflict files; interactive line-by-line diff merging is deferred to Phase 3.
+* **Generic WebDAV Accounts:** The retained provider prototype is not runtime-accessible in v1; production WebDAV support is deferred to v2.
 * **Direct LAN Peer-to-Peer Sync:** This is already solved by Syncthing. RelayFS focuses strictly on cloud storage integration.
-

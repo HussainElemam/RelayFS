@@ -269,6 +269,27 @@ class CloudDocumentsProviderTest {
     }
 
     @Test
+    fun testOpenDocument_ReadOnlyZeroByteFileUsesCacheAfterFirstDownload() = runTest {
+        fakeCloudProvider.fileContents["f_empty"] = ""
+        val entity = SafMetadataEntity(
+            documentId = "f_empty",
+            parentDocumentId = "d0",
+            accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
+            displayName = "empty.md",
+            mimeType = "text/markdown",
+            sizeBytes = 0L,
+            isDirectory = false
+        )
+        database.safMetadataDao().insertOrUpdate(entity)
+
+        provider.openDocument("f_empty", "r", null).close()
+        provider.openDocument("f_empty", "r", null).close()
+
+        assertEquals(1, fakeCloudProvider.downloadCount)
+        assertTrue(File(File(cacheDir, "read"), "f_empty").exists())
+    }
+
+    @Test
     fun testOpenDocument_WriteModeStaging() = runTest {
         val entity = SafMetadataEntity(
             documentId = "f_write",
@@ -469,6 +490,7 @@ class CloudDocumentsProviderTest {
 
         var itemsToReturn: List<CloudItem> = emptyList()
         var downloadFailure: Exception? = null
+        var downloadCount: Int = 0
         val fileContents = mutableMapOf<String, String>()
         val deletedIds = mutableListOf<String>()
 
@@ -492,6 +514,7 @@ class CloudDocumentsProviderTest {
             destinationFile: File,
             progress: ((bytesRead: Long, totalBytes: Long) -> Unit)?
         ): Result<Unit> {
+            downloadCount++
             downloadFailure?.let { return Result.failure(it) }
             val content = fileContents[remoteId] ?: "mock content for $remoteId"
             destinationFile.parentFile?.mkdirs()
