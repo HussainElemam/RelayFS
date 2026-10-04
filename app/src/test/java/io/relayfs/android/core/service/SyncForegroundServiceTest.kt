@@ -2,7 +2,9 @@ package io.relayfs.android.core.service
 
 import android.app.NotificationManager
 import android.content.Context
+import android.content.ComponentName
 import android.content.Intent
+import androidx.room.MultiInstanceInvalidationService
 import androidx.test.core.app.ApplicationProvider
 import io.relayfs.android.core.model.CloudAccount
 import io.relayfs.android.core.model.CloudItem
@@ -19,6 +21,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 import java.io.File
 
@@ -27,10 +30,19 @@ import java.io.File
 class SyncForegroundServiceTest {
 
     private lateinit var context: Context
+    private lateinit var invalidationService: ServiceController<MultiInstanceInvalidationService>
 
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
+        // Supply Room's actual binder because Robolectric does not create bound services.
+        invalidationService = Robolectric.buildService(MultiInstanceInvalidationService::class.java).create()
+        val serviceIntent = Intent(context, MultiInstanceInvalidationService::class.java)
+        shadowOf(context as android.app.Application).setComponentNameAndServiceForBindServiceForIntent(
+            serviceIntent,
+            ComponentName(context, MultiInstanceInvalidationService::class.java),
+            invalidationService.get().onBind(serviceIntent)
+        )
         SyncForegroundService.customCloudProviderFactory = object : CloudProviderFactory {
             override suspend fun getProvider(accountId: String): CloudProvider = FakeServiceCloudProvider()
         }
@@ -39,6 +51,7 @@ class SyncForegroundServiceTest {
     @After
     fun tearDown() {
         SyncForegroundService.customCloudProviderFactory = null
+        invalidationService.destroy()
     }
 
     @Test

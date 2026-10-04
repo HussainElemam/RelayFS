@@ -33,6 +33,7 @@ class ConflictCenterViewModelTest {
     private lateinit var context: Context
     private lateinit var database: AppDatabase
     private lateinit var viewModel: ConflictCenterViewModel
+    private val requestedSyncs = mutableListOf<String>()
 
     private val folderPairId = "pair-conflicts"
 
@@ -40,7 +41,7 @@ class ConflictCenterViewModelTest {
     fun setup() = runTest {
         context = ApplicationProvider.getApplicationContext()
         database = AppDatabase.createInMemory(context)
-        viewModel = ConflictCenterViewModel(database)
+        viewModel = ConflictCenterViewModel(database, requestSync = { requestedSyncs.add(it) })
 
         database.folderPairDao().insert(
             FolderPairEntity(
@@ -89,6 +90,7 @@ class ConflictCenterViewModelTest {
         val baseline = database.syncBaselineDao().getBaseline(folderPairId, "notes.md")
         assertEquals("Cloud Edit".length.toLong(), baseline?.remoteSizeBytes)
         assertEquals(0L, baseline?.localSizeBytes)
+        assertEquals(listOf(folderPairId), requestedSyncs)
     }
 
     @Test
@@ -119,6 +121,7 @@ class ConflictCenterViewModelTest {
         val baseline = database.syncBaselineDao().getBaseline(folderPairId, "report.txt")
         assertEquals("Fresh Cloud".length.toLong(), baseline?.remoteSizeBytes)
         assertEquals(localFile.length(), baseline?.localSizeBytes)
+        assertEquals(listOf(folderPairId), requestedSyncs)
     }
 
     @Test
@@ -148,6 +151,7 @@ class ConflictCenterViewModelTest {
         val baseline = database.syncBaselineDao().getBaseline(folderPairId, "essay.md")
         assertEquals("Cloud Essay".length.toLong(), baseline?.remoteSizeBytes)
         assertEquals(0L, baseline?.localSizeBytes)
+        assertEquals(listOf(folderPairId), requestedSyncs)
     }
 
     @Test
@@ -171,5 +175,40 @@ class ConflictCenterViewModelTest {
         assertEquals(ConflictStatus.RESOLVED_KEEP_LOCAL, database.syncConflictDao().getConflict(conflict.id)?.status)
         assertTrue(localFile.exists())
         assertTrue(database.syncConflictDao().getActiveConflicts(folderPairId).isEmpty())
+        assertEquals(listOf(folderPairId), requestedSyncs)
+    }
+
+    @Test
+    fun failedResolutionDoesNotRequestSync() = runTest {
+        val conflict = SyncConflictEntity(
+            id = "missing-local", folderPairId = folderPairId, relativePath = "missing.md",
+            localFilePath = File(tempFolder.root, "missing.md").path,
+            conflictFilePath = tempFolder.newFile("missing (conflict).md").path,
+            localModifiedTimeMillis = 1L, remoteModifiedTimeMillis = 2L
+        )
+        database.syncConflictDao().insert(conflict)
+        viewModel.resolveKeepLocal(conflict).join()
+        assertTrue(requestedSyncs.isEmpty())
+        assertEquals(ConflictStatus.ACTIVE, database.syncConflictDao().getConflict(conflict.id)?.status)
+        assertTrue(viewModel.uiState.value.message!!.startsWith("Could not resolve conflict:"))
+    }
+
+    @Test
+    fun schedulingFailureRetainsTheResolutionAndExplainsHowToRetry() = runTest {
+        viewModel.cancelActiveJobs()
+        viewModel = ConflictCenterViewModel(database, requestSync = { throw IllegalStateException("Scheduler unavailable") })
+        val local = tempFolder.newFile("retry.md").apply { writeText("Local edit") }
+        val branch = tempFolder.newFile("retry (conflict).md").apply { writeText("Cloud edit") }
+        val conflict = SyncConflictEntity(
+            id = "retry", folderPairId = folderPairId, relativePath = local.name,
+            localFilePath = local.path, conflictFilePath = branch.path,
+            localModifiedTimeMillis = 1L, remoteModifiedTimeMillis = 2L
+        )
+        database.syncConflictDao().insert(conflict)
+        viewModel.resolveKeepLocal(conflict).join()
+        assertEquals(ConflictStatus.RESOLVED_KEEP_LOCAL, database.syncConflictDao().getConflict(conflict.id)?.status)
+        assertEquals("Local edit", local.readText())
+        assertTrue(viewModel.uiState.value.message!!.contains("resolved locally"))
+        assertTrue(viewModel.uiState.value.message!!.contains("Tap Sync Now"))
     }
 }

@@ -1,6 +1,10 @@
 package io.relayfs.android.ui
 
 import android.content.Context
+import android.app.Application
+import android.content.ComponentName
+import android.content.Intent
+import androidx.room.MultiInstanceInvalidationService
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
 import androidx.work.WorkManager
@@ -27,6 +31,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Robolectric
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -141,6 +147,53 @@ class DashboardViewModelTest {
             assertTrue(viewModel.uiState.value.isSyncing)
         } finally { release.complete(Unit); operation.join() }
         awaitHealth(SyncHealth.NOT_CONFIGURED)
+    }
+
+    @Test fun workerDatabaseUpdatesDashboardWithoutReopeningTheScreen() = runBlocking<Unit> {
+        viewModel.cancelActiveJobs()
+        database.close()
+        context.deleteDatabase(AppDatabase.DATABASE_NAME)
+        // Robolectric does not bind real Android services automatically. Use Room's actual
+        // service binder so this exercises cross-connection notifications, not a mock refresh.
+        val invalidationService = Robolectric.buildService(MultiInstanceInvalidationService::class.java).create()
+        val serviceIntent = Intent(context, MultiInstanceInvalidationService::class.java)
+        val shadowApplication = shadowOf(context as Application)
+        shadowApplication.setComponentNameAndServiceForBindServiceForIntent(
+            serviceIntent,
+            ComponentName(context, MultiInstanceInvalidationService::class.java),
+            invalidationService.get().onBind(serviceIntent)
+        )
+        shadowApplication.setBindServiceCallsOnServiceConnectedDirectly(true)
+        database = AppDatabase.build(context)
+        val workerDatabase = AppDatabase.build(context)
+        val pair = FolderPairEntity("worker-health", "acc-1", "Health", "/sdcard/health", "d1", "/health")
+        try {
+            database.folderPairDao().insert(pair)
+            viewModel = DashboardViewModel(database, syncScheduler, context)
+            awaitHealth(SyncHealth.NOT_SYNCED)
+            workerDatabase.folderPairDao().getById(pair.id)
+            // Wait for each connection to register with the invalidation service.
+            withContext(Dispatchers.IO) {
+                java.util.concurrent.CompletableFuture.runAsync({}, database.queryExecutor).get()
+                java.util.concurrent.CompletableFuture.runAsync({}, workerDatabase.queryExecutor).get()
+            }
+            workerDatabase.folderPairDao().updateLastSync(pair.id, 1000, SyncStatus.SUCCESS)
+            awaitHealth(SyncHealth.HEALTHY)
+            assertEquals(1000L, viewModel.uiState.value.folderPairs.single().lastSyncTimestamp)
+
+            workerDatabase.folderPairDao().updateLastSync(pair.id, 2000, SyncStatus.ERROR)
+            awaitHealth(SyncHealth.ERROR)
+            assertEquals(2000L, viewModel.uiState.value.folderPairs.single().lastSyncTimestamp)
+            workerDatabase.folderPairDao().updateLastSync(pair.id, 3000, SyncStatus.SUCCESS)
+            awaitHealth(SyncHealth.HEALTHY)
+            assertEquals(3000L, viewModel.uiState.value.folderPairs.single().lastSyncTimestamp)
+        } finally {
+            viewModel.cancelActiveJobs()
+            workerDatabase.close()
+            database.close()
+            context.deleteDatabase(AppDatabase.DATABASE_NAME)
+            invalidationService.destroy()
+        }
     }
 
     @Test fun pendingEditExportRetainsTheOriginalAndDiscardProtectsOpenDescriptors() = runBlocking<Unit> {

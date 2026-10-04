@@ -164,7 +164,7 @@ fun RelayFSApp(
 
             composable(Screen.Conflicts.route) {
                 val conflictsViewModel: ConflictCenterViewModel = viewModel(
-                    factory = ConflictCenterViewModel.Factory(database)
+                    factory = ConflictCenterViewModel.Factory(database, syncScheduler)
                 )
                 val uiState by conflictsViewModel.uiState.collectAsState()
 
@@ -183,7 +183,7 @@ fun RelayFSApp(
             ) { backStackEntry ->
                 val conflictId = backStackEntry.arguments?.getString("conflictId") ?: ""
                 val diffViewModel: DiffViewerViewModel = viewModel(
-                    factory = DiffViewerViewModel.Factory(database, conflictId)
+                    factory = DiffViewerViewModel.Factory(database, conflictId, syncScheduler)
                 )
                 val uiState by diffViewModel.uiState.collectAsState()
 

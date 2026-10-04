@@ -6,6 +6,8 @@ This tracker maintains the live state of implementation across all development p
 
 ## Roadmap Overview
 
+Optional proposals for later consideration are collected in [Future Ideas](FUTURE_IDEAS.md).
+
 | Phase | Title | Focus Area | Status | Target Completion |
 | :--- | :--- | :--- | :--- | :--- |
 | **Phase 1** | [Core Architecture & Domain Models](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) | Domain models, Room DB schema, Keystore security, CloudProvider contract | `COMPLETED` | Week 1 |
@@ -92,6 +94,8 @@ This tracker maintains the live state of implementation across all development p
 
 ## Final audit remediation — 4 October 2026
 
+- [x] Queue sync after conflict resolution from both UI entry points; preserve both-version behavior and provide scheduling-failure feedback (5 October 2026, Phase 6 maintenance).
+- [x] Correct stale dashboard sync status and last-sync timestamp through Room notifications between database instances; regression and full debug checks passed (see Phase 6 status correction).
 - [x] Validate both final audit reports and record corrections to unsupported claims.
 - [x] Correct established-root handling, endpoint version checks, transfer/deletion ordering, independent hashes, and conservative deletion safeguards.
 - [x] Preserve local/cloud versions and persistent virtual-drive edits; provide export/retry/discard and interrupted-resolution recovery.

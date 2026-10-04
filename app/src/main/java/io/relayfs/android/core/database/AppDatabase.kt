@@ -89,6 +89,9 @@ abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 DATABASE_NAME
             )
+                // UI, workers, and the documents provider own separate connections to this file.
+                // Broadcast their writes so every connection's observed queries stay current.
+                .enableMultiInstanceInvalidation()
                 .addCallback(enableForeignKeysCallback)
                 .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()

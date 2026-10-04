@@ -84,3 +84,16 @@ Deliver a clean, modern, ad-free **Jetpack Compose (Material 3)** user interface
 2. Update checklist in this document and `docs/ROADMAP.md`.
 3. Report results to user and **STOP** for review.
 
+## Dashboard status correction — 4 October 2026
+
+- [x] Broadcast Room changes between the dashboard, workers, and documents-provider connections so successful syncs update the health badge and last-sync timestamp without reopening the screen.
+- [x] Reproduce stale dashboard state with the original configuration; verify cross-connection success, error, and recovery updates with the fix.
+- [x] Run `testDebugUnitTest lintDebug assembleDebug --offline -Pksp.incremental=false`: 284 tests passed, zero lint errors, and debug APK built. Lint reports 60 warnings.
+- [x] Update the connected Samsung SM-A528B with the debug APK using an in-place install; confirm the existing pair displays `Healthy` and `Last sync: 2 minutes ago`, Room's invalidation service is bound, and the crash buffer remains empty.
+
+## Automatic sync after conflict resolution — 5 October 2026
+
+- [x] Queue immediate folder-pair sync after successful Keep Local, Keep Cloud, or Keep Both actions in both the Conflict Center and diff viewer. Failed resolutions keep the conflict active and do not queue work.
+- [x] Preserve completed local resolutions if scheduling fails and show a Sync Now retry message; render Conflict Center feedback even when no active conflicts remain. Remove the empty-state claim that all changes have already synchronized.
+- [x] Verify automatic sync requests for all three choices, failed-resolution handling, and scheduling-failure recovery. Run `testDebugUnitTest lintDebug assembleDebug --offline -Pksp.incremental=false`: 288 tests passed, zero lint errors, 60 lint warnings, and debug APK built.
+- [x] Install the updated debug APK in place on the connected Samsung SM-A528B, preserving app data, and verify MainActivity launches successfully. A new live-cloud conflict round trip remains a device acceptance check; no existing conflicts were resolved automatically during installation.

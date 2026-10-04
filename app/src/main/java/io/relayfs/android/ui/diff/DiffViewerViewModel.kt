@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.relayfs.android.core.database.AppDatabase
 import io.relayfs.android.core.database.entity.SyncConflictEntity
 import io.relayfs.android.core.sync.engine.ConflictResolutionManager
+import io.relayfs.android.core.work.scheduler.SyncScheduler
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,7 +31,8 @@ data class DiffViewerUiState(
 class DiffViewerViewModel(
     private val database: AppDatabase,
     private val conflictId: String,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val requestSync: (String) -> Unit
 ) : ViewModel() {
 
     private val resolutionManager = ConflictResolutionManager(database)
@@ -90,21 +92,21 @@ class DiffViewerViewModel(
     fun resolveKeepLocal(): Job {
         return viewModelScope.launch(ioDispatcher) {
             val conflict = _uiState.value.conflict ?: return@launch
-            resolve { resolutionManager.keepLocal(conflict) }
+            resolve(conflict) { resolutionManager.keepLocal(conflict) }
         }
     }
 
     fun resolveKeepCloud(): Job {
         return viewModelScope.launch(ioDispatcher) {
             val conflict = _uiState.value.conflict ?: return@launch
-            resolve { resolutionManager.keepCloud(conflict) }
+            resolve(conflict) { resolutionManager.keepCloud(conflict) }
         }
     }
 
     fun resolveKeepBoth(): Job {
         return viewModelScope.launch(ioDispatcher) {
             val conflict = _uiState.value.conflict ?: return@launch
-            resolve { resolutionManager.keepBoth(conflict) }
+            resolve(conflict) { resolutionManager.keepBoth(conflict) }
         }
     }
 
@@ -120,25 +122,33 @@ class DiffViewerViewModel(
         output.toString("UTF-8")
     }
 
-    private suspend fun resolve(action: suspend () -> Unit) {
+    private suspend fun resolve(conflict: SyncConflictEntity, action: suspend () -> Unit) {
         try {
             action()
-            _uiState.update { it.copy(isResolved = true, errorMessage = null) }
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }
         catch (e: Exception) {
             _uiState.update {
                 it.copy(errorMessage = "Could not resolve conflict: ${e.message ?: "unknown error"}")
             }
+            return
+        }
+        try {
+            requestSync(conflict.folderPairId)
+            _uiState.update { it.copy(isResolved = true, errorMessage = null) }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
+            _uiState.update { it.copy(isResolved = true, errorMessage = "Conflict resolved locally, but sync could not be queued. Tap Sync Now to retry.") }
         }
     }
 
     class Factory(
         private val database: AppDatabase,
-        private val conflictId: String
+        private val conflictId: String,
+        private val syncScheduler: SyncScheduler
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return DiffViewerViewModel(database, conflictId) as T
+            return DiffViewerViewModel(database, conflictId, requestSync = syncScheduler::triggerImmediateSync) as T
         }
     }
 }

@@ -42,6 +42,7 @@ class DiffViewerViewModelTest {
     private lateinit var conflictFile: File
     private val conflictId = "conflict-diff-1"
     private val folderPairId = "pair-diff"
+    private val requestedSyncs = mutableListOf<String>()
 
     @Before
     fun setup() = runTest {
@@ -89,7 +90,7 @@ class DiffViewerViewModelTest {
 
     @Test
     fun testLoadsConflictAndComputesDiff() = runTest(testDispatcher) {
-        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher)
+        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher, requestSync = { requestedSyncs.add(it) })
         viewModel.loadJob?.join()
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -108,7 +109,7 @@ class DiffViewerViewModelTest {
 
     @Test
     fun testToggleViewMode() = runTest(testDispatcher) {
-        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher)
+        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher, requestSync = { requestedSyncs.add(it) })
         viewModel.loadJob?.join()
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -121,7 +122,7 @@ class DiffViewerViewModelTest {
 
     @Test
     fun testResolveKeepLocal() = runTest(testDispatcher) {
-        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher)
+        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher, requestSync = { requestedSyncs.add(it) })
         viewModel.loadJob?.join()
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -135,11 +136,12 @@ class DiffViewerViewModelTest {
 
         val record = database.syncConflictDao().getConflict(conflictId)
         assertEquals(ConflictStatus.RESOLVED_KEEP_LOCAL, record?.status)
+        assertEquals(listOf(folderPairId), requestedSyncs)
     }
 
     @Test
     fun testResolveKeepCloud() = runTest(testDispatcher) {
-        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher)
+        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher, requestSync = { requestedSyncs.add(it) })
         viewModel.loadJob?.join()
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -153,11 +155,12 @@ class DiffViewerViewModelTest {
 
         val record = database.syncConflictDao().getConflict(conflictId)
         assertEquals(ConflictStatus.RESOLVED_KEEP_REMOTE, record?.status)
+        assertEquals(listOf(folderPairId), requestedSyncs)
     }
 
     @Test
     fun testResolveKeepBoth() = runTest(testDispatcher) {
-        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher)
+        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher, requestSync = { requestedSyncs.add(it) })
         viewModel.loadJob?.join()
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -170,11 +173,12 @@ class DiffViewerViewModelTest {
 
         val record = database.syncConflictDao().getConflict(conflictId)
         assertEquals(ConflictStatus.RESOLVED_KEEP_BOTH, record?.status)
+        assertEquals(listOf(folderPairId), requestedSyncs)
     }
 
     @Test
     fun testNonExistentConflictShowsError() = runTest(testDispatcher) {
-        val viewModel = DiffViewerViewModel(database, "non-existent-id", testDispatcher)
+        val viewModel = DiffViewerViewModel(database, "non-existent-id", testDispatcher, requestSync = { requestedSyncs.add(it) })
         viewModel.loadJob?.join()
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -183,5 +187,28 @@ class DiffViewerViewModelTest {
         assertNotNull(state.errorMessage)
         assertEquals("Conflict record not found", state.errorMessage)
     }
-}
 
+    @Test
+    fun failedResolutionDoesNotRequestSync() = runTest(testDispatcher) {
+        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher, requestSync = { requestedSyncs.add(it) })
+        viewModel.loadJob?.join()
+        localFile.delete()
+        viewModel.resolveKeepLocal().join()
+        assertTrue(requestedSyncs.isEmpty())
+        assertFalse(viewModel.uiState.value.isResolved)
+        assertEquals(ConflictStatus.ACTIVE, database.syncConflictDao().getConflict(conflictId)?.status)
+    }
+
+    @Test
+    fun schedulingFailureKeepsBothVersionsAndDoesNotReopenTheConflict() = runTest(testDispatcher) {
+        val viewModel = DiffViewerViewModel(database, conflictId, testDispatcher,
+            requestSync = { throw IllegalStateException("Scheduler unavailable") })
+        viewModel.loadJob?.join()
+        viewModel.resolveKeepBoth().join()
+        assertTrue(viewModel.uiState.value.isResolved)
+        assertTrue(localFile.exists())
+        assertTrue(conflictFile.exists())
+        assertEquals(ConflictStatus.RESOLVED_KEEP_BOTH, database.syncConflictDao().getConflict(conflictId)?.status)
+        assertTrue(viewModel.uiState.value.errorMessage!!.contains("Tap Sync Now"))
+    }
+}

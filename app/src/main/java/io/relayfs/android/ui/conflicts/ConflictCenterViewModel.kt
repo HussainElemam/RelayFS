@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import io.relayfs.android.core.database.AppDatabase
 import io.relayfs.android.core.database.entity.SyncConflictEntity
 import io.relayfs.android.core.sync.engine.ConflictResolutionManager
+import io.relayfs.android.core.work.scheduler.SyncScheduler
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -23,7 +24,8 @@ data class ConflictsUiState(
 
 class ConflictCenterViewModel(
     private val database: AppDatabase,
-    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val requestSync: (String) -> Unit
 ) : ViewModel() {
 
     private val resolutionManager = ConflictResolutionManager(database)
@@ -56,38 +58,45 @@ class ConflictCenterViewModel(
 
     fun resolveKeepLocal(conflict: SyncConflictEntity): Job {
         return viewModelScope.launch(ioDispatcher) {
-            resolve { resolutionManager.keepLocal(conflict) }
+            resolve(conflict) { resolutionManager.keepLocal(conflict) }
         }
     }
 
     fun resolveKeepCloud(conflict: SyncConflictEntity): Job {
         return viewModelScope.launch(ioDispatcher) {
-            resolve { resolutionManager.keepCloud(conflict) }
+            resolve(conflict) { resolutionManager.keepCloud(conflict) }
         }
     }
 
     fun resolveKeepBoth(conflict: SyncConflictEntity): Job {
         return viewModelScope.launch(ioDispatcher) {
-            resolve { resolutionManager.keepBoth(conflict) }
+            resolve(conflict) { resolutionManager.keepBoth(conflict) }
         }
     }
 
-    private suspend fun resolve(action: suspend () -> Unit) {
+    private suspend fun resolve(conflict: SyncConflictEntity, action: suspend () -> Unit) {
         try {
             action()
-            _uiState.update { it.copy(message = null) }
         } catch (e: kotlinx.coroutines.CancellationException) { throw e }
         catch (e: Exception) {
             _uiState.update {
                 it.copy(message = "Could not resolve conflict: ${e.message ?: "unknown error"}")
             }
+            return
+        }
+        try {
+            requestSync(conflict.folderPairId)
+            _uiState.update { it.copy(message = "Conflict resolved. Sync queued.") }
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
+            _uiState.update { it.copy(message = "Conflict resolved locally, but sync could not be queued. Tap Sync Now to retry.") }
         }
     }
 
-    class Factory(private val database: AppDatabase) : ViewModelProvider.Factory {
+    class Factory(private val database: AppDatabase, private val syncScheduler: SyncScheduler) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ConflictCenterViewModel(database) as T
+            return ConflictCenterViewModel(database, requestSync = syncScheduler::triggerImmediateSync) as T
         }
     }
 }

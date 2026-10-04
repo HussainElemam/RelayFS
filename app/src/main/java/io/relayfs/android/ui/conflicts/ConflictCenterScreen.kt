@@ -66,33 +66,38 @@ fun ConflictCenterScreen(
             )
         }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (uiState.isLoading) {
-                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (uiState.activeConflicts.isEmpty()) {
-                EmptyConflictsState()
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    item {
-                        ConflictHeaderBanner(count = uiState.activeConflicts.size)
-                    }
+            uiState.message?.let {
+                Text(it, modifier = Modifier.padding(16.dp))
+            }
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                } else if (uiState.activeConflicts.isEmpty()) {
+                    EmptyConflictsState()
+                } else {
+                    LazyColumn(
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        item {
+                            ConflictHeaderBanner(count = uiState.activeConflicts.size)
+                        }
 
-                    items(uiState.activeConflicts, key = { it.id }) { conflict ->
-                        ConflictItemCard(
-                            conflict = conflict,
-                            onKeepLocal = { onKeepLocal(conflict) },
-                            onKeepCloud = { onKeepCloud(conflict) },
-                            onKeepBoth = { onKeepBoth(conflict) },
-                            onReviewDiff = { onViewDiff(conflict) }
-                        )
+                        items(uiState.activeConflicts, key = { it.id }) { conflict ->
+                            ConflictItemCard(
+                                conflict = conflict,
+                                onKeepLocal = { onKeepLocal(conflict) },
+                                onKeepCloud = { onKeepCloud(conflict) },
+                                onKeepBoth = { onKeepBoth(conflict) },
+                                onReviewDiff = { onViewDiff(conflict) }
+                            )
+                        }
                     }
                 }
             }
@@ -285,7 +290,7 @@ fun EmptyConflictsState() {
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "All of your file modifications have synchronized smoothly without any branched conflicts.",
+                text = "No conflicts are awaiting your choice. Resolved changes sync in the background.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -306,4 +311,3 @@ fun ConflictCenterEmptyPreview() {
         )
     }
 }
-
