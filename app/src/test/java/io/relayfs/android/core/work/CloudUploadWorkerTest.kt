@@ -71,6 +71,7 @@ class CloudUploadWorkerTest {
             displayName = "sample.txt",
             mimeType = "text/plain",
             sizeBytes = 10L,
+            lastModified = 0L,
             isDirectory = false
         )
         database.safMetadataDao().insertOrUpdate(initialEntity)
@@ -128,7 +129,8 @@ class CloudUploadWorkerTest {
             Result.success(emptyList())
 
         override suspend fun getItemMetadata(remoteId: String): Result<CloudItem> =
-            Result.failure(UnsupportedOperationException())
+            Result.success(CloudItem(remoteId, "d0", "sample.txt", "/sample.txt", false, 10L, 0L))
+        override suspend fun preserveFile(remoteId: String) = Result.success(Unit)
 
         override fun supportsDeltaSync(): Boolean = false
 

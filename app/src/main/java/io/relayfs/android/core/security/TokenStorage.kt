@@ -5,6 +5,14 @@ package io.relayfs.android.core.security
  * Implementations must use hardware-backed encryption (e.g. Android Keystore).
  */
 interface TokenStorage {
+    suspend fun saveSession(accountId: String, token: String, endpoint: String, identity: String) {
+        saveIdentity(accountId, identity)
+        saveEndpoint(accountId, endpoint)
+        saveToken(accountId, token)
+    }
+
+    suspend fun saveIdentity(accountId: String, identity: String) {}
+    suspend fun getIdentity(accountId: String): String? = null
 
     /**
      * Securely stores an access or refresh token for a cloud account.
@@ -36,4 +44,3 @@ interface TokenStorage {
      */
     suspend fun getEndpoint(accountId: String): String? = null
 }
-

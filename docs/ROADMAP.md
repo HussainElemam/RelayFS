@@ -9,7 +9,7 @@ This tracker maintains the live state of implementation across all development p
 | Phase | Title | Focus Area | Status | Target Completion |
 | :--- | :--- | :--- | :--- | :--- |
 | **Phase 1** | [Core Architecture & Domain Models](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_01_core_architecture_and_models.md) | Domain models, Room DB schema, Keystore security, CloudProvider contract | `COMPLETED` | Week 1 |
-| **Phase 2** | [pCloud Client & OAuth2 PKCE](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_02_pcloud_client_and_oauth.md) | pCloud REST API, OAuth2 PKCE, delta change detection, chunked upload | `COMPLETED` | Week 2 |
+| **Phase 2** | [pCloud Client & OAuth](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_02_pcloud_client_and_oauth.md) | pCloud REST API, mobile token OAuth, delta change detection, chunked upload | `COMPLETED` | Week 2 |
 | **Phase 3** | [3-Way Reconciliation Engine](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_03_sync_engine_core.md) | 3-way sync engine, 11-state matrix, conflict branching, atomic writes | `COMPLETED` | Week 3–4 |
 | **Phase 4** | [Filesystem Watcher & Storage](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_04_filesystem_watcher_and_storage.md) | Recursive FileObserver (inotify), debouncing queue, Scoped Storage | `COMPLETED` | Week 5 |
 | **Phase 5** | [Background Sync & WorkManager](file:///home/hussain/AndroidStudioProjects/android_sync_idea/docs/phases/phase_05_background_sync_and_workmanager.md) | WorkManager periodic sync, ForegroundService (dataSync), battery handling | `COMPLETED` | Week 6 |
@@ -36,10 +36,10 @@ This tracker maintains the live state of implementation across all development p
 - [x] `CloudProvider` interface contract finalized
 - [x] Unit tests for database migrations and DAOs passing
 
-### Phase 2: pCloud Client & OAuth2 PKCE
+### Phase 2: pCloud Client & OAuth
 - [x] pCloud API models (JSON serialization for `listfolder`, `diff`, `upload`)
 - [x] Retrofit / OkHttp client with OAuth Bearer interceptor
-- [x] OAuth2 PKCE flow handler with Chrome Custom Tabs and redirect intent
+- [x] Mobile token OAuth flow with Chrome Custom Tabs, state validation, and redirect intent (PKCE helper exists; runtime does not perform a PKCE code exchange)
 - [x] Datacenter auto-routing (US `api.pcloud.com` vs. EU `eapi.pcloud.com`)
 - [x] Delta sync parser (`diff` endpoint with `diffid` pagination)
 - [x] Chunked upload implementation (`upload_create`, `upload_write`, `upload_save`)
@@ -88,3 +88,16 @@ This tracker maintains the live state of implementation across all development p
 - [x] In-app side-by-side Markdown diff viewer
 - [x] JVM/Robolectric integration suite and physical-device launch smoke test
 - [x] ProGuard / R8 rules verification and release APK build
+
+
+## Final audit remediation — 4 October 2026
+
+- [x] Validate both final audit reports and record corrections to unsupported claims.
+- [x] Correct established-root handling, endpoint version checks, transfer/deletion ordering, independent hashes, and conservative deletion safeguards.
+- [x] Preserve local/cloud versions and persistent virtual-drive edits; provide export/retry/discard and interrupted-resolution recovery.
+- [x] Harden response parsing, credential origin scope, cancellation, account binding, pair overlap, symlink handling, and bounded diff allocation.
+- [x] Add regression scenarios and complete debug/release unit tests, lint, and both APK builds.
+- [ ] Run corrected-build acceptance on a physical device and disposable pCloud folder, including interruption and recovery.
+- [ ] Sign and validate the production release on the target device.
+
+Evidence and remaining external-writer limits: [audit remediation and validation](reports/2026-10-04_audit_remediation_validation.md). Completion of implementation is not an unconditional approval for sole copies of real data.

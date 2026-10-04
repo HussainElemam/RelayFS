@@ -78,7 +78,7 @@ class AccountsViewModelTest {
     }
 
     @Test
-    fun testTokenFlowDirectlySavesToken() = runTest {
+    fun testUnverifiedUiEventCannotReplaceCredentials() = runTest {
         io.relayfs.android.core.provider.pcloud.auth.OAuthEventBus.emitCallback(
             io.relayfs.android.core.provider.pcloud.auth.OAuthCallbackData(
                 accessToken = "direct_token_xyz",
@@ -89,12 +89,12 @@ class AccountsViewModelTest {
         // Give the coroutine a moment to consume the event
         kotlinx.coroutines.delay(100)
 
-        assertEquals("direct_token_xyz", tokenStorage.getToken(AccountsViewModel.DEFAULT_ACCOUNT_ID))
-        assertEquals("https://api.pcloud.com", tokenStorage.getEndpoint(AccountsViewModel.DEFAULT_ACCOUNT_ID))
+        assertEquals(null, tokenStorage.getToken(AccountsViewModel.DEFAULT_ACCOUNT_ID))
+        assertEquals(null, tokenStorage.getEndpoint(AccountsViewModel.DEFAULT_ACCOUNT_ID))
     }
 
     @Test
-    fun testTokenFlowSavesEuEndpoint() = runTest {
+    fun testUnverifiedUiEventCannotReplaceDatacenter() = runTest {
         io.relayfs.android.core.provider.pcloud.auth.OAuthEventBus.emitCallback(
             io.relayfs.android.core.provider.pcloud.auth.OAuthCallbackData(
                 accessToken = "eu_token_456",
@@ -104,8 +104,8 @@ class AccountsViewModelTest {
 
         kotlinx.coroutines.delay(100)
 
-        assertEquals("eu_token_456", tokenStorage.getToken(AccountsViewModel.DEFAULT_ACCOUNT_ID))
-        assertEquals("https://eapi.pcloud.com", tokenStorage.getEndpoint(AccountsViewModel.DEFAULT_ACCOUNT_ID))
+        assertEquals(null, tokenStorage.getToken(AccountsViewModel.DEFAULT_ACCOUNT_ID))
+        assertEquals(null, tokenStorage.getEndpoint(AccountsViewModel.DEFAULT_ACCOUNT_ID))
     }
 }
 

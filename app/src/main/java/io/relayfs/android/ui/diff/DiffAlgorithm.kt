@@ -21,7 +21,8 @@ data class DiffSummary(
 
 data class DiffResult(
     val lines: List<DiffLine>,
-    val summary: DiffSummary
+    val summary: DiffSummary,
+    val tooLarge: Boolean = false
 )
 
 object DiffAlgorithm {
@@ -29,12 +30,23 @@ object DiffAlgorithm {
     /**
      * Computes line-by-line diff using Longest Common Subsequence (LCS).
      */
+    const val MAX_TEXT_BYTES = 1024 * 1024
+    private const val MAX_LINES = 2000
+    private const val MAX_CELLS = 1_000_000L
+    fun tooLarge(): DiffResult = DiffResult(emptyList(), DiffSummary(0, 0, 0), true)
+
     fun computeDiff(oldText: String, newText: String): DiffResult {
+        if (oldText.length > MAX_TEXT_BYTES || newText.length > MAX_TEXT_BYTES) return tooLarge()
+
+        if (oldText.count { it == '\n' || it == '\r' } > MAX_LINES || newText.count { it == '\n' || it == '\r' } > MAX_LINES) return tooLarge()
+        if (oldText.toByteArray(Charsets.UTF_8).size > MAX_TEXT_BYTES || newText.toByteArray(Charsets.UTF_8).size > MAX_TEXT_BYTES) return tooLarge()
         val oldLines = if (oldText.isEmpty()) emptyList() else oldText.lines()
         val newLines = if (newText.isEmpty()) emptyList() else newText.lines()
 
         val n = oldLines.size
         val m = newLines.size
+
+        if (n > MAX_LINES || m > MAX_LINES || (n + 1L) * (m + 1L) > MAX_CELLS) return tooLarge()
 
         // Build LCS DP table
         val dp = Array(n + 1) { IntArray(m + 1) }

@@ -8,6 +8,6 @@
 <full-backup-content>
     <!-- Sync state is device-specific; restoring it could apply stale deletions on a new device. -->
     <exclude domain="database" path="relayfs.db" />
-    <exclude domain="sharedpref" path="relayfs_secure_tokens.xml" />
+    <exclude domain="sharedpref" path="." />
     <exclude domain="sharedpref" path="pcloud_oauth_state.xml" />
 </full-backup-content>

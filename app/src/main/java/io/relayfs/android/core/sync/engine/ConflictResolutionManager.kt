@@ -7,6 +7,7 @@ import io.relayfs.android.core.database.entity.SyncConflictEntity
 import io.relayfs.android.core.model.ConflictStatus
 import io.relayfs.android.core.sync.hash.FastHasher
 import io.relayfs.android.core.sync.io.AtomicFileWriter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
@@ -19,13 +20,13 @@ class ConflictResolutionManager(private val database: AppDatabase) {
     suspend fun keepLocal(conflict: SyncConflictEntity) = withConflictLock(conflict.id) {
         val current = requireActiveConflict(conflict.id)
         val localFile = requireFile(current.localFilePath, "Local file")
-        val conflictFile = requireFile(current.conflictFilePath, "Cloud conflict copy")
+        val conflictFile = File(current.conflictFilePath)
         val branchRelativePath = branchRelativePath(current, conflictFile)
-        val remoteSize = conflictFile.length()
-        val remoteHash = current.remoteContentHash ?: FastHasher.hashFile(conflictFile)
+        val remoteSize = if (conflictFile.exists()) conflictFile.length() else database.syncBaselineDao().getBaseline(current.folderPairId, current.relativePath)?.remoteSizeBytes ?: 0L
+        val remoteHash = current.remoteContentHash ?: if (conflictFile.exists()) FastHasher.hashFile(conflictFile) else "unknown"
         val remoteId = current.remoteFileId ?: currentBaselineRemoteId(current)
 
-        val tombstone = moveAside(conflictFile, current.id)
+        val tombstone = if (conflictFile.exists()) moveAside(conflictFile, current.id) else null
         try {
             database.withTransaction {
                 database.syncBaselineDao().deleteByPath(current.folderPairId, branchRelativePath)
@@ -38,10 +39,10 @@ class ConflictResolutionManager(private val database: AppDatabase) {
                 )
             }
         } catch (e: Exception) {
-            restoreMovedFile(tombstone, conflictFile)
+            if (tombstone != null) restoreMovedFile(tombstone, conflictFile)
             throw e
         }
-        tombstone.delete()
+        if (tombstone != null) retain(current, tombstone)
     }
 
     suspend fun keepCloud(conflict: SyncConflictEntity) = withConflictLock(conflict.id) {
@@ -53,14 +54,22 @@ class ConflictResolutionManager(private val database: AppDatabase) {
         val remoteHash = current.remoteContentHash ?: FastHasher.hashFile(conflictFile)
         val remoteId = current.remoteFileId ?: currentBaselineRemoteId(current)
 
-        val replacement = File(localFile.parentFile, ".${localFile.name}.${current.id}.replacement")
-        val localBackup = File(localFile.parentFile, ".${localFile.name}.${current.id}.original")
+        val branchBaseline = database.syncBaselineDao().getBaseline(current.folderPairId, branchRelativePath)
+        val branchBefore = FileSafety.snapshot(conflictFile, branchRelativePath)!!
+        val branchWasEdited = branchBaseline?.contentHash != null && branchBaseline.contentHash != branchBefore.contentHash
+        val replacement = journalFile(localFile, current.id, "replacement")
+        val localBackup = journalFile(localFile, current.id, "original")
         if (replacement.exists() || localBackup.exists()) {
             throw IOException("A previous conflict resolution did not finish cleanly")
         }
 
         conflictFile.inputStream().use { input ->
             AtomicFileWriter.write(replacement, input, expectedSize = remoteSize)
+        }
+        val transferred = FileSafety.snapshot(replacement, current.relativePath)!!
+        if (!FileSafety.matches(conflictFile, branchBefore) || transferred.contentHash != branchBefore.contentHash) {
+            replacement.delete()
+            throw IOException("Conflict copy changed during resolution; retry after editing finishes")
         }
         if (!localFile.renameTo(localBackup)) {
             replacement.delete()
@@ -82,15 +91,18 @@ class ConflictResolutionManager(private val database: AppDatabase) {
             database.withTransaction {
                 database.syncBaselineDao().deleteByPath(current.folderPairId, branchRelativePath)
                 database.syncBaselineDao().upsert(
-                    SyncBaselineEntity(
+                    if (branchWasEdited) pendingLocalUploadBaseline(current, localFile, remoteId,
+                        branchBaseline?.remoteSizeBytes ?: remoteSize, remoteHash)
+                    else SyncBaselineEntity(
                         folderPairId = current.folderPairId,
                         relativePath = current.relativePath,
                         remoteId = remoteId,
-                        localModifiedTimeMillis = localFile.lastModified(),
+                        localModifiedTimeMillis = transferred.modifiedTimeMillis,
                         remoteModifiedTimeMillis = current.remoteModifiedTimeMillis,
-                        localSizeBytes = localFile.length(),
+                        localSizeBytes = transferred.sizeBytes,
                         remoteSizeBytes = remoteSize,
-                        contentHash = remoteHash,
+                        contentHash = transferred.contentHash,
+                        remoteContentHash = remoteHash,
                         isDirectory = false
                     )
                 )
@@ -106,8 +118,8 @@ class ConflictResolutionManager(private val database: AppDatabase) {
             if (rollbackFailure != null) e.addSuppressed(rollbackFailure)
             throw e
         }
-        localBackup.delete()
-        tombstone.delete()
+        retain(current, localBackup)
+        retain(current, tombstone)
     }
 
     suspend fun keepBoth(conflict: SyncConflictEntity) = withConflictLock(conflict.id) {
@@ -132,12 +144,47 @@ class ConflictResolutionManager(private val database: AppDatabase) {
         }
     }
 
+    private suspend fun retain(conflict: SyncConflictEntity, file: File) {
+        val pair = database.folderPairDao().getById(conflict.folderPairId) ?: return
+        if (file.exists()) FileSafety.quarantine(File(pair.localPath), file)
+    }
+
+    /** Recover file moves made before a conflict-resolution transaction committed. Caller owns the sync lock. */
+    suspend fun recoverInterrupted(pairId: String) {
+        for (conflict in database.syncConflictDao().getConflictsForPairFlow(pairId).first()) {
+            val pair = database.folderPairDao().getById(pairId) ?: throw IOException("Folder pair no longer exists")
+            val local = SyncSafety.containedFile(File(pair.localPath), conflict.relativePath)
+            require(local.canonicalFile == File(conflict.localFilePath).canonicalFile) { "Invalid conflict path" }
+            branchRelativePath(conflict, File(conflict.conflictFilePath))
+            val branch = File(conflict.conflictFilePath)
+            val backup = existingJournalFile(local, conflict.id, "original")
+            val replacement = existingJournalFile(local, conflict.id, "replacement")
+            val tombstone = existingJournalFile(branch, conflict.id, "resolved")
+            if (conflict.status == ConflictStatus.ACTIVE) {
+                if (backup.exists()) {
+                    if (local.exists()) retain(conflict, local)
+                    if (!backup.renameTo(local)) throw IOException("Cannot restore interrupted resolution")
+                }
+                if (tombstone.exists() && !branch.exists() && !tombstone.renameTo(branch)) throw IOException("Cannot restore cloud conflict copy")
+            } else {
+                retain(conflict, backup)
+                retain(conflict, tombstone)
+            }
+            retain(conflict, replacement)
+        }
+    }
+
     private suspend fun requireActiveConflict(id: String): SyncConflictEntity {
         val current = database.syncConflictDao().getConflict(id)
             ?: throw IOException("Conflict record no longer exists")
         if (current.status != ConflictStatus.ACTIVE) {
             throw IOException("Conflict has already been resolved")
         }
+        val pair = database.folderPairDao().getById(current.folderPairId) ?: throw IOException("Folder pair no longer exists")
+        val root = File(pair.localPath)
+        val expectedLocal = SyncSafety.containedFile(root, current.relativePath)
+        require(expectedLocal.canonicalFile == File(current.localFilePath).canonicalFile) { "Conflict local path is outside its folder pair" }
+        branchRelativePath(current, File(current.conflictFilePath))
         return current
     }
 
@@ -147,7 +194,7 @@ class ConflictResolutionManager(private val database: AppDatabase) {
         val root = File(pair.localPath).canonicalFile
         val branch = conflictFile.canonicalFile
         val relative = branch.relativeTo(root).path.replace('\\', '/')
-        if (relative == ".." || relative.startsWith("../")) {
+        if (relative.isBlank() || relative == "." || relative == ".." || relative.startsWith("../")) {
             throw IOException("Conflict copy is outside the configured local folder")
         }
         return relative
@@ -174,7 +221,8 @@ class ConflictResolutionManager(private val database: AppDatabase) {
         remoteModifiedTimeMillis = conflict.remoteModifiedTimeMillis,
         localSizeBytes = if (localFile.length() == 0L) -1L else 0L,
         remoteSizeBytes = remoteSize,
-        contentHash = remoteHash,
+        contentHash = null,
+        remoteContentHash = remoteHash,
         isDirectory = false
     )
 
@@ -186,8 +234,20 @@ class ConflictResolutionManager(private val database: AppDatabase) {
         return file
     }
 
+    private fun journalFile(file: File, conflictId: String, kind: String): File {
+        val idHash = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(conflictId.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+        return File(file.parentFile, ".relayfs.$idHash.$kind")
+    }
+
+    private fun existingJournalFile(file: File, conflictId: String, kind: String): File {
+        val bounded = journalFile(file, conflictId, kind)
+        if (bounded.exists()) return bounded
+        return File(file.parentFile, ".${file.name}.$conflictId.$kind")
+    }
+
     private fun moveAside(file: File, conflictId: String): File {
-        val tombstone = File(file.parentFile, ".${file.name}.$conflictId.resolved")
+        val tombstone = journalFile(file, conflictId, "resolved")
         if (tombstone.exists() || !file.renameTo(tombstone)) {
             throw IOException("Could not safely remove conflict copy: ${file.absolutePath}")
         }
@@ -227,7 +287,7 @@ class ConflictResolutionManager(private val database: AppDatabase) {
     }
 
     private suspend fun <T> withConflictLock(conflictId: String, block: suspend () -> T): T {
-        return mutexFor(conflictId).withLock { block() }
+        return SyncSafety.exclusive { mutexFor(conflictId).withLock { block() } }
     }
 
     companion object {

@@ -30,6 +30,7 @@ data class SyncBaselineEntity(
     val remoteSizeBytes: Long,
     val contentHash: String? = null, // xxHash64 or SHA-1 checksum
     val isDirectory: Boolean = false,
-    val lastSyncedAt: Long = System.currentTimeMillis()
+    val lastSyncedAt: Long = System.currentTimeMillis(),
+    val remoteContentHash: String? = null
 )
 

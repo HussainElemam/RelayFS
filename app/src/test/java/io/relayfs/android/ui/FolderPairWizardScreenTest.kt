@@ -33,7 +33,7 @@ class FolderPairWizardScreenTest {
                     ),
                     onNameChanged = {},
                     onLocalPathChanged = {},
-                    onRemotePathChanged = { _, _ -> },
+                    onRemotePathChanged = {},
                     onDirectionChanged = {},
                     onIntervalChanged = {},
                     onWifiOnlyChanged = {},
@@ -64,7 +64,7 @@ class FolderPairWizardScreenTest {
                     ),
                     onNameChanged = {},
                     onLocalPathChanged = {},
-                    onRemotePathChanged = { _, _ -> },
+                    onRemotePathChanged = {},
                     onDirectionChanged = {},
                     onIntervalChanged = {},
                     onWifiOnlyChanged = {},
@@ -85,4 +85,3 @@ class FolderPairWizardScreenTest {
         composeTestRule.onNodeWithTag("btn_browse_folder").performScrollTo().assertIsDisplayed()
     }
 }
-

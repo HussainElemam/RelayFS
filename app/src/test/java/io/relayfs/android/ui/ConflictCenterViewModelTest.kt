@@ -151,7 +151,7 @@ class ConflictCenterViewModelTest {
     }
 
     @Test
-    fun testResolutionFailsSafelyWhenConflictCopyIsMissing() = runTest {
+    fun testKeepLocalResolvesWhenConflictCopyIsMissing() = runTest {
         val localFile = tempFolder.newFile("missing-branch.md").apply { writeText("Local") }
         val missingConflictFile = File(tempFolder.root, "missing-branch (conflict).md")
         val conflict = SyncConflictEntity(
@@ -168,8 +168,8 @@ class ConflictCenterViewModelTest {
 
         viewModel.resolveKeepLocal(conflict).join()
 
-        assertEquals(ConflictStatus.ACTIVE, database.syncConflictDao().getConflict(conflict.id)?.status)
+        assertEquals(ConflictStatus.RESOLVED_KEEP_LOCAL, database.syncConflictDao().getConflict(conflict.id)?.status)
         assertTrue(localFile.exists())
-        assertTrue(viewModel.uiState.value.message?.contains("missing") == true)
+        assertTrue(database.syncConflictDao().getActiveConflicts(folderPairId).isEmpty())
     }
 }

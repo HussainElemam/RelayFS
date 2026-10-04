@@ -65,3 +65,15 @@ Finalize the application for general availability:
 1. Ensure all tests pass.
 2. Update checklist in this document and `docs/ROADMAP.md`.
 3. Provide final release summary to user.
+
+
+## 6. Final audit remediation — 4 October 2026
+
+- [x] Review both audit reports; preserve historical findings and document validated corrections.
+- [x] Fix reproduced sync, SAF, account, conflict, parsing, cancellation, and diff safety defects with regression coverage.
+- [x] Run debug/release unit suites, Android lint, debug assembly, and R8 release assembly.
+- [x] Document recovery copies, persistent pending edits, upgrade behavior, and residual atomic-mutation limits.
+- [ ] Perform live pCloud and physical-device acceptance for the corrected build.
+- [ ] Configure release signing and validate the signed production build.
+
+See [audit remediation and validation](../reports/2026-10-04_audit_remediation_validation.md) for exact results and the finding-to-test mapping. Earlier device smoke tests do not satisfy acceptance of these later safety changes.

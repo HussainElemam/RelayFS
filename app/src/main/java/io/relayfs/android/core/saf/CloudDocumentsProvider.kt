@@ -13,6 +13,10 @@ import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
+import androidx.room.withTransaction
+import io.relayfs.android.core.sync.engine.SyncSafety
+import io.relayfs.android.core.sync.io.AtomicFileWriter
+import kotlinx.coroutines.CancellationException
 import io.relayfs.android.R
 import io.relayfs.android.core.database.AppDatabase
 import io.relayfs.android.core.database.entity.SafMetadataEntity
@@ -54,13 +58,19 @@ class CloudDocumentsProvider : DocumentsProvider() {
         HandlerThread("SafOnCloseThread").apply { start() }
     }
     private val onCloseHandler by lazy { Handler(handlerThread.looper) }
+    private val refreshErrors = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     override fun onCreate(): Boolean {
         val ctx = context ?: return false
         database = customDatabase ?: AppDatabase.build(ctx)
-        tokenStorage = customTokenStorage ?: EncryptedSharedPrefsTokenStorage(ctx)
+        tokenStorage = customTokenStorage ?: EncryptedSharedPrefsTokenStorage.create(ctx)
         providerFactory = customCloudProviderFactory ?: DefaultCloudProviderFactory(tokenStorage)
         safCacheDir = customCacheDir ?: File(ctx.cacheDir, "saf_cache").apply { mkdirs() }
+        safScope.launch {
+            try { SyncSafety.exclusive { PendingEdits.recover(ctx, database) } }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { /* The durable journal remains available for recovery on next launch. */ }
+        }
         return true
     }
 
@@ -151,7 +161,12 @@ class CloudDocumentsProvider : DocumentsProvider() {
             }
             // Launch asynchronous background refresh without blocking query thread
             safScope.launch {
-                refreshRemoteFolder(parentDocumentId, authority)
+                try { refreshRemoteFolder(parentDocumentId, authority) }
+                catch (e: CancellationException) { throw e }
+                catch (e: Exception) {
+                    refreshErrors[parentDocumentId] = "Could not refresh cloud folder. Reconnect or retry."
+                    ctx.contentResolver.notifyChange(childUri, null)
+                }
             }
         } else {
             cursor.extras = Bundle().apply {
@@ -159,40 +174,55 @@ class CloudDocumentsProvider : DocumentsProvider() {
             }
         }
 
+        refreshErrors[parentDocumentId]?.let { cursor.extras = Bundle(cursor.extras).apply {
+            putString(DocumentsContract.EXTRA_ERROR, it)
+        } }
         return cursor
     }
 
-    suspend fun refreshRemoteFolder(parentDocumentId: String, authority: String) {
-        val ctx = context ?: return
-        val provider = providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID) ?: return
-        val result = provider.listFolder(parentDocumentId, recursive = false)
+    private suspend fun removeCachedTree(id: String, visited: MutableSet<String> = mutableSetOf()) {
+        if (!visited.add(id)) return
+        for (child in database.safMetadataDao().getChildren(id)) removeCachedTree(child.documentId, visited)
+        database.safMetadataDao().deleteById(id)
+        invalidateContent(id)
+    }
 
-        if (result.isSuccess) {
-            val items = result.getOrThrow()
-            val safDao = database.safMetadataDao()
+    private fun invalidateContent(id: String) {
+        File(safCacheDir, "read/$id").delete()
+        File(safCacheDir, "thumbs").listFiles()?.filter { it.name.startsWith("${id}_") }?.forEach { it.delete() }
+    }
 
-            val entities = items.map { item ->
-                item.toSafEntity(parentDocumentId, AccountsViewModel.DEFAULT_ACCOUNT_ID)
+    suspend fun refreshRemoteFolder(parentDocumentId: String, authority: String) = SyncSafety.exclusive {
+        val ctx = context ?: return@exclusive
+        val provider = providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)
+            ?: throw IOException("Reconnect the cloud account")
+        val items = provider.listFolder(parentDocumentId, recursive = false).getOrThrow()
+        val dao = database.safMetadataDao()
+        val entities = items.map { it.toSafEntity(parentDocumentId, AccountsViewModel.DEFAULT_ACCOUNT_ID) }
+        database.withTransaction {
+            for (old in dao.getChildren(parentDocumentId)) {
+                val fresh = entities.find { it.documentId == old.documentId }
+                if (fresh == null) removeCachedTree(old.documentId)
+                else if (old.sizeBytes != fresh.sizeBytes || old.lastModified != fresh.lastModified || old.contentHash != fresh.contentHash) invalidateContent(old.documentId)
             }
-
-            safDao.insertOrUpdate(entities)
-
-            // Update parent record to record refresh timestamp
-            val updatedParent = (safDao.getById(parentDocumentId) ?: SafMetadataEntity(
-                documentId = parentDocumentId,
-                parentDocumentId = null,
+            dao.insertOrUpdate(entities)
+            dao.insertOrUpdate((dao.getById(parentDocumentId) ?: SafMetadataEntity(
+                documentId = parentDocumentId, parentDocumentId = null,
                 accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
                 displayName = if (parentDocumentId == ROOT_DOCUMENT_ID) "pCloud" else parentDocumentId,
-                mimeType = DocumentsContract.Document.MIME_TYPE_DIR,
-                isDirectory = true,
+                mimeType = DocumentsContract.Document.MIME_TYPE_DIR, isDirectory = true,
                 flags = DocumentsContract.Document.FLAG_DIR_SUPPORTS_CREATE
-            )).copy(cachedAt = System.currentTimeMillis())
-
-            safDao.insertOrUpdate(updatedParent)
-
-            val childUri = DocumentsContract.buildChildDocumentsUri(authority, parentDocumentId)
-            ctx.contentResolver.notifyChange(childUri, null)
+            )).copy(cachedAt = System.currentTimeMillis()))
         }
+        refreshErrors.remove(parentDocumentId)
+        ctx.contentResolver.notifyChange(DocumentsContract.buildChildDocumentsUri(authority, parentDocumentId), null)
+    }
+
+    override fun shutdown() {
+        providerJob.cancel()
+        if (handlerThread.isAlive) { handlerThread.quitSafely(); if (Thread.currentThread() != handlerThread) handlerThread.join(1000) }
+        if (::database.isInitialized && customDatabase == null) database.close()
+        super.shutdown()
     }
 
     override fun openDocument(
@@ -202,106 +232,56 @@ class CloudDocumentsProvider : DocumentsProvider() {
     ): ParcelFileDescriptor {
         val ctx = context ?: throw IllegalStateException("Context is null")
         val safDao = database.safMetadataDao()
-        val entity = runBlocking(Dispatchers.IO) {
-            safDao.getById(documentId)
-        } ?: throw FileNotFoundException("Document $documentId not found in metadata cache")
-
-        val pfdMode = ParcelFileDescriptor.parseMode(mode)
-        val isWrite = mode.contains("w") || (pfdMode and ParcelFileDescriptor.MODE_WRITE_ONLY) != 0
-
-        val readDir = File(safCacheDir, "read").apply { mkdirs() }
-        val cachedFile = File(readDir, documentId)
-
-        if (!isWrite) {
-            // Read-Only mode: ensure cached locally to support random seek
-            if (!cachedFile.exists() || (entity.sizeBytes > 0L && cachedFile.length() == 0L)) {
-                signal?.throwIfCanceled()
-                val provider = runBlocking(Dispatchers.IO) {
-                    providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)
-                } ?: throw FileNotFoundException("Cloud provider not available")
-
-                val downloadResult = runBlocking(Dispatchers.IO) {
-                    provider.downloadFile(documentId, cachedFile)
-                }
+        require(documentId.matches(Regex("[fd][0-9]+"))) { "Invalid document ID" }
+        return runBlocking(Dispatchers.IO) { SyncSafety.exclusive {
+            val old = safDao.getById(documentId) ?: throw FileNotFoundException("Document not found")
+            require(!old.isDirectory) { "Cannot open a folder as a file" }
+            val pfdMode = ParcelFileDescriptor.parseMode(mode)
+            val isWrite = mode.contains("w") || mode.contains("+")
+            val pending = database.pendingUploadDao().getAll().lastOrNull { it.documentId == documentId && File(it.localPath).isFile }
+            if (pending != null) {
+                if (isWrite) throw IOException("This document has a pending edit. Retry or export it before editing again.")
+                return@exclusive ParcelFileDescriptor.open(File(pending.localPath), ParcelFileDescriptor.MODE_READ_ONLY)
+            }
+            signal?.throwIfCanceled()
+            val provider = providerFactory.getProvider(old.accountId) ?: throw FileNotFoundException("Reconnect the cloud account")
+            val current = provider.getItemMetadata(documentId).getOrThrow()
+            val entity = current.toSafEntity(old.parentDocumentId ?: ROOT_DOCUMENT_ID, old.accountId)
+            if (old.sizeBytes != entity.sizeBytes || old.lastModified != entity.lastModified || old.contentHash != entity.contentHash) invalidateContent(documentId)
+            safDao.insertOrUpdate(entity)
+            val cachedFile = File(File(safCacheDir, "read").apply { mkdirs() }, documentId)
+            if (!cachedFile.isFile || cachedFile.length() != entity.sizeBytes) {
                 try {
-                    downloadResult.getOrThrow()
-                    if (!cachedFile.exists() || (entity.sizeBytes > 0L && cachedFile.length() == 0L)) {
-                        throw IOException("Cloud provider returned no content")
-                    }
-                } catch (e: Exception) {
-                    cachedFile.delete()
-                    throw FileNotFoundException("Could not download $documentId for reading").apply {
-                        initCause(e)
+                    provider.downloadFile(documentId, cachedFile).getOrThrow()
+                    if (!cachedFile.isFile || cachedFile.length() != entity.sizeBytes) throw IOException("Download size mismatch")
+                    val after = provider.getItemMetadata(documentId).getOrThrow()
+                    if (after.sizeBytes != current.sizeBytes || after.modifiedTimeMillis != current.modifiedTimeMillis || after.contentHash != current.contentHash) throw IOException("Cloud file changed during download")
+                } catch (e: Exception) { cachedFile.delete(); throw e }
+            }
+            signal?.throwIfCanceled()
+            if (!isWrite) return@exclusive ParcelFileDescriptor.open(cachedFile, ParcelFileDescriptor.MODE_READ_ONLY)
+            val row = PendingEdits.begin(ctx, database, entity, tokenStorage.getIdentity(entity.accountId), cachedFile)
+            PendingEdits.openDescriptors.add(row.id)
+            try {
+                ParcelFileDescriptor.open(File(row.localPath), pfdMode, onCloseHandler) { error ->
+                    runBlocking(Dispatchers.IO) {
+                        try { PendingEdits.closed(ctx, database, row, error?.message) }
+                        catch (e: Exception) { database.pendingUploadDao().setState(row.id, "ERROR", "Upload could not be scheduled. Export or retry this edit.") }
                     }
                 }
-                signal?.throwIfCanceled()
+            } catch (e: Exception) {
+                PendingEdits.openDescriptors.remove(row.id)
+                database.pendingUploadDao().setState(row.id, "ERROR", e.message)
+                throw e
             }
-            return ParcelFileDescriptor.open(cachedFile, ParcelFileDescriptor.MODE_READ_ONLY)
-        }
-
-        // Write mode: open staging file and register OnCloseListener for upload
-        val stagingDir = File(safCacheDir, "staging").apply { mkdirs() }
-        val stagingFile = File(stagingDir, "${documentId}_${System.currentTimeMillis()}.tmp")
-
-        // If file exists on cloud but is not yet in read cache, download it first so edits/appends don't truncate existing data
-        if (!cachedFile.exists() || cachedFile.length() == 0L) {
-            val hasRemoteContent = entity.sizeBytes > 0L
-            if (hasRemoteContent) {
-                signal?.throwIfCanceled()
-                val provider = runBlocking(Dispatchers.IO) {
-                    providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)
-                } ?: throw FileNotFoundException("Cloud provider not available")
-                try {
-                    val downloadResult = runBlocking(Dispatchers.IO) {
-                        provider.downloadFile(documentId, cachedFile)
-                    }
-                    downloadResult.getOrThrow()
-                    if (!cachedFile.exists() || cachedFile.length() == 0L) {
-                        throw IOException("Cloud provider returned no content")
-                    }
-                } catch (e: Exception) {
-                    cachedFile.delete()
-                    throw FileNotFoundException("Could not download $documentId before editing").apply {
-                        initCause(e)
-                    }
-                }
-                signal?.throwIfCanceled()
-            }
-        }
-
-        if (cachedFile.exists() && cachedFile.length() > 0L) {
-            cachedFile.copyTo(stagingFile, overwrite = true)
-        } else {
-            stagingFile.createNewFile()
-        }
-
-        return ParcelFileDescriptor.open(stagingFile, pfdMode, onCloseHandler) { ioException ->
-            if (ioException == null) {
-                handleDocumentClosed(ctx, documentId, stagingFile, entity)
-            }
-        }
+        } }
     }
 
-    fun handleDocumentClosed(
-        ctx: Context,
-        documentId: String,
-        stagingFile: File,
-        entity: SafMetadataEntity
-    ) {
-        val readDir = File(safCacheDir, "read").apply { mkdirs() }
-        val cachedFile = File(readDir, documentId)
-        if (stagingFile.exists()) {
-            stagingFile.copyTo(cachedFile, overwrite = true)
+    fun handleDocumentClosed(ctx: Context, documentId: String, stagingFile: File, entity: SafMetadataEntity) {
+        runBlocking(Dispatchers.IO) {
+            val row = PendingEdits.begin(ctx, database, entity, tokenStorage.getIdentity(entity.accountId), stagingFile)
+            PendingEdits.closed(ctx, database, row)
         }
-
-        CloudUploadWorker.enqueueUpload(
-            context = ctx,
-            documentId = documentId,
-            file = stagingFile,
-            parentFolderId = entity.parentDocumentId ?: ROOT_DOCUMENT_ID,
-            remoteName = entity.displayName,
-            accountId = entity.accountId
-        )
     }
 
     override fun openDocumentThumbnail(
@@ -337,115 +317,69 @@ class CloudDocumentsProvider : DocumentsProvider() {
         displayName: String
     ): String {
         val ctx = context ?: throw IllegalStateException("Context is null")
-        val provider = runBlocking(Dispatchers.IO) {
-            providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)
-        } ?: throw FileNotFoundException("Cloud provider not available")
-
-        val isDir = mimeType == DocumentsContract.Document.MIME_TYPE_DIR
-
-        val createdItem = runBlocking(Dispatchers.IO) {
-            if (isDir) {
-                provider.createFolder(parentDocumentId, displayName).getOrThrow()
-            } else {
-                val tempEmptyFile = File.createTempFile("empty", ".tmp", ctx.cacheDir).apply {
-                    createNewFile()
-                }
-                try {
-                    provider.uploadFile(parentDocumentId, tempEmptyFile, displayName).getOrThrow()
-                } finally {
-                    tempEmptyFile.delete()
-                }
+        require(displayName.isNotBlank() && displayName !in listOf(".", "..") && '/' !in displayName && '\\' !in displayName) { "Invalid document name" }
+        return runBlocking(Dispatchers.IO) { SyncSafety.exclusive {
+            val provider = providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID) ?: throw FileNotFoundException("Reconnect the cloud account")
+            val created = if (mimeType == DocumentsContract.Document.MIME_TYPE_DIR) provider.createFolder(parentDocumentId, displayName).getOrThrow()
+            else {
+                val empty = File.createTempFile("empty", ".tmp", ctx.cacheDir)
+                try { provider.uploadNewFile(parentDocumentId, empty, displayName).getOrThrow() } finally { empty.delete() }
             }
-        }
-
-        val entity = createdItem.toSafEntity(parentDocumentId, AccountsViewModel.DEFAULT_ACCOUNT_ID)
-        runBlocking(Dispatchers.IO) {
+            val entity = created.toSafEntity(parentDocumentId, AccountsViewModel.DEFAULT_ACCOUNT_ID)
             database.safMetadataDao().insertOrUpdate(entity)
-        }
-
-        val authority = "${ctx.packageName}.documents"
-        val childUri = DocumentsContract.buildChildDocumentsUri(authority, parentDocumentId)
-        ctx.contentResolver.notifyChange(childUri, null)
-
-        return entity.documentId
+            ctx.contentResolver.notifyChange(DocumentsContract.buildChildDocumentsUri("${ctx.packageName}.documents", parentDocumentId), null)
+            entity.documentId
+        } }
     }
 
     override fun deleteDocument(documentId: String) {
+        require(documentId != ROOT_DOCUMENT_ID && documentId != "0") { "Cannot delete the account root" }
         val ctx = context ?: throw IllegalStateException("Context is null")
-        val safDao = database.safMetadataDao()
-        val entity = runBlocking(Dispatchers.IO) {
-            safDao.getById(documentId)
-        } ?: throw FileNotFoundException("Document $documentId not found")
-
-        val provider = runBlocking(Dispatchers.IO) {
-            providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)
-        } ?: throw FileNotFoundException("Cloud provider not available")
-
-        runBlocking(Dispatchers.IO) {
-            provider.deleteItem(documentId, entity.isDirectory).getOrThrow()
-            safDao.deleteById(documentId)
+        runBlocking(Dispatchers.IO) { SyncSafety.exclusive {
+            val entity = database.safMetadataDao().getById(documentId) ?: throw FileNotFoundException("Document not found")
+            val provider = providerFactory.getProvider(entity.accountId) ?: throw FileNotFoundException("Reconnect the cloud account")
+            require(database.pendingUploadDao().getAll().none { it.documentId == documentId }) { "Export or retry the pending edit before deleting" }
             if (entity.isDirectory) {
-                safDao.deleteChildren(documentId)
+                require(provider.listFolder(documentId, false).getOrThrow().isEmpty()) { "Delete files individually before removing a folder" }
+                provider.deleteItem(documentId, true).getOrThrow()
+            } else {
+                val before = provider.getItemMetadata(documentId).getOrThrow()
+                provider.preserveFile(documentId).getOrThrow()
+                val after = provider.getItemMetadata(documentId).getOrThrow()
+                require(before.sizeBytes == after.sizeBytes && before.modifiedTimeMillis == after.modifiedTimeMillis && before.contentHash == after.contentHash) { "Cloud file changed during deletion" }
+                provider.deleteItem(documentId, false).getOrThrow()
             }
-        }
-
-        val authority = "${ctx.packageName}.documents"
-        entity.parentDocumentId?.let { parentId ->
-            val parentUri = DocumentsContract.buildChildDocumentsUri(authority, parentId)
-            ctx.contentResolver.notifyChange(parentUri, null)
-        }
+            database.withTransaction { removeCachedTree(documentId) }
+            entity.parentDocumentId?.let { ctx.contentResolver.notifyChange(DocumentsContract.buildChildDocumentsUri("${ctx.packageName}.documents", it), null) }
+        } }
     }
 
     override fun renameDocument(documentId: String, displayName: String): String {
+        require(documentId != ROOT_DOCUMENT_ID && documentId != "0") { "Cannot rename the account root" }
+        require(displayName.isNotBlank() && displayName !in listOf(".", "..") && '/' !in displayName && '\\' !in displayName) { "Invalid document name" }
         val ctx = context ?: throw IllegalStateException("Context is null")
-        val safDao = database.safMetadataDao()
-        val entity = runBlocking(Dispatchers.IO) {
-            safDao.getById(documentId)
-        } ?: throw FileNotFoundException("Document $documentId not found")
-
-        val provider = runBlocking(Dispatchers.IO) {
-            providerFactory.getProvider(AccountsViewModel.DEFAULT_ACCOUNT_ID)
-        } ?: throw FileNotFoundException("Cloud provider not available")
-
-        val targetParent = entity.parentDocumentId ?: ROOT_DOCUMENT_ID
-        val updatedItem = runBlocking(Dispatchers.IO) {
-            provider.moveItem(documentId, targetParent, displayName).getOrThrow()
-        }
-
-        val updatedEntity = entity.copy(
-            documentId = updatedItem.id,
-            displayName = updatedItem.name,
-            lastModified = updatedItem.modifiedTimeMillis,
-            cachedAt = System.currentTimeMillis()
-        )
-
-        runBlocking(Dispatchers.IO) {
-            if (updatedItem.id != entity.documentId) {
-                safDao.deleteById(entity.documentId)
-            }
-            safDao.insertOrUpdate(updatedEntity)
-        }
-
-        val authority = "${ctx.packageName}.documents"
-        val docUri = DocumentsContract.buildDocumentUri(authority, updatedEntity.documentId)
-        ctx.contentResolver.notifyChange(docUri, null)
-        entity.parentDocumentId?.let { parentId ->
-            val parentUri = DocumentsContract.buildChildDocumentsUri(authority, parentId)
-            ctx.contentResolver.notifyChange(parentUri, null)
-        }
-
-        return updatedEntity.documentId
+        return runBlocking(Dispatchers.IO) { SyncSafety.exclusive {
+            val dao = database.safMetadataDao()
+            val entity = dao.getById(documentId) ?: throw FileNotFoundException("Document not found")
+            val provider = providerFactory.getProvider(entity.accountId) ?: throw FileNotFoundException("Reconnect the cloud account")
+            val parent = entity.parentDocumentId ?: ROOT_DOCUMENT_ID
+            require(database.pendingUploadDao().getAll().none { it.documentId == documentId }) { "Export or retry pending edits before renaming" }
+            require(provider.listFolder(parent, false).getOrThrow().none { it.name == displayName && it.id != documentId }) { "Destination already exists" }
+            val updated = provider.moveItem(documentId, parent, displayName).getOrThrow().toSafEntity(parent, entity.accountId)
+            database.withTransaction { if (updated.documentId != documentId) dao.deleteById(documentId); dao.insertOrUpdate(updated) }
+            invalidateContent(documentId)
+            ctx.contentResolver.notifyChange(DocumentsContract.buildChildDocumentsUri("${ctx.packageName}.documents", parent), null)
+            updated.documentId
+        } }
     }
 
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean {
-        if (parentDocumentId == ROOT_DOCUMENT_ID) {
-            return true
-        }
 
         var currentDocId: String? = documentId
         val safDao = database.safMetadataDao()
 
-        while (currentDocId != null) {
+        val visited = mutableSetOf<String>()
+        while (currentDocId != null && visited.add(currentDocId)) {
             val entity = runBlocking(Dispatchers.IO) {
                 safDao.getById(currentDocId!!)
             } ?: break
@@ -542,7 +476,8 @@ class CloudDocumentsProvider : DocumentsProvider() {
                 lastModified = modifiedTimeMillis,
                 isDirectory = isDirectory,
                 flags = flags,
-                cachedAt = System.currentTimeMillis()
+                cachedAt = System.currentTimeMillis(),
+                contentHash = contentHash
             )
         }
 

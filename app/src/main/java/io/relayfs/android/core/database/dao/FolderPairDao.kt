@@ -51,5 +51,12 @@ interface FolderPairDao {
         cursorToken: String?,
         updatedAt: Long = System.currentTimeMillis()
     )
-}
 
+    @Query("UPDATE folder_pairs SET remoteFolderId = :remoteFolderId, remoteFolderPath = :remoteFolderPath, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun updateRemoteFolder(
+        id: String,
+        remoteFolderId: String,
+        remoteFolderPath: String,
+        updatedAt: Long = System.currentTimeMillis()
+    )
+}

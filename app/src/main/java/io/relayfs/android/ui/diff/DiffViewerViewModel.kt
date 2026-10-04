@@ -56,19 +56,20 @@ class DiffViewerViewModel(
 
             val localText = try {
                 val file = File(conflict.localFilePath)
-                if (file.exists()) file.readText() else ""
+                if (file.exists() && file.length() <= DiffAlgorithm.MAX_TEXT_BYTES) readBounded(file) else ""
             } catch (e: Exception) {
                 "(Unable to read local file: ${e.message})"
             }
 
             val conflictText = try {
                 val file = File(conflict.conflictFilePath)
-                if (file.exists()) file.readText() else ""
+                if (file.exists() && file.length() <= DiffAlgorithm.MAX_TEXT_BYTES) readBounded(file) else ""
             } catch (e: Exception) {
                 "(Unable to read cloud conflict file: ${e.message})"
             }
 
-            val diff = DiffAlgorithm.computeDiff(localText, conflictText)
+            val oversized = listOf(conflict.localFilePath, conflict.conflictFilePath).any { File(it).length() > DiffAlgorithm.MAX_TEXT_BYTES }
+            val diff = if (oversized) DiffAlgorithm.tooLarge() else DiffAlgorithm.computeDiff(localText, conflictText)
 
             _uiState.update {
                 it.copy(
@@ -107,11 +108,24 @@ class DiffViewerViewModel(
         }
     }
 
+    private fun readBounded(file: File): String = file.inputStream().use { input ->
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(8192)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            if (output.size() + count > DiffAlgorithm.MAX_TEXT_BYTES) throw java.io.IOException("File too large for visual diff")
+            output.write(buffer, 0, count)
+        }
+        output.toString("UTF-8")
+    }
+
     private suspend fun resolve(action: suspend () -> Unit) {
         try {
             action()
             _uiState.update { it.copy(isResolved = true, errorMessage = null) }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
             _uiState.update {
                 it.copy(errorMessage = "Could not resolve conflict: ${e.message ?: "unknown error"}")
             }

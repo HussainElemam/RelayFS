@@ -13,7 +13,6 @@ import java.util.UUID
  */
 object ConflictResolver {
 
-    private val dateFormat = SimpleDateFormat("yyyy-MM-dd-HHmm", Locale.US)
 
     /**
      * Generates a conflict sibling filename:
@@ -23,16 +22,17 @@ object ConflictResolver {
         originalName: String,
         timestampMillis: Long = System.currentTimeMillis()
     ): String {
-        val dateString = dateFormat.format(Date(timestampMillis))
+        val dateString = SimpleDateFormat("yyyy-MM-dd-HHmmss", Locale.US).format(Date(timestampMillis)) + "-" + UUID.randomUUID().toString().take(8)
         val dotIndex = originalName.lastIndexOf('.')
 
-        return if (dotIndex > 0) {
-            val baseName = originalName.substring(0, dotIndex)
-            val extension = originalName.substring(dotIndex) // includes the '.'
-            "$baseName (conflict - Cloud - $dateString)$extension"
-        } else {
-            "$originalName (conflict - Cloud - $dateString)"
+        val extension = if (dotIndex > 0) originalName.substring(dotIndex).take(20) else ""
+        val suffix = " (conflict - Cloud - $dateString)$extension"
+        var baseName = if (dotIndex > 0) originalName.substring(0, dotIndex) else originalName
+        while ((baseName + suffix).toByteArray(Charsets.UTF_8).size > 255) {
+            val last = baseName.codePointBefore(baseName.length)
+            baseName = baseName.dropLast(Character.charCount(last))
         }
+        return "$baseName$suffix"
     }
 
     /**

@@ -49,6 +49,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -73,8 +76,18 @@ fun DashboardScreen(
     onAddPairClicked: () -> Unit,
     onBatteryOptimizeClicked: () -> Unit,
     onDismissBatteryBanner: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onRetryPending: (String) -> Unit = {},
+    onExportPending: (String, String) -> Unit = { _, _ -> },
+    onDiscardPending: (String) -> Unit = {}
 ) {
+    var discarding by remember { mutableStateOf<String?>(null) }
+    discarding?.let { id ->
+        androidx.compose.material3.AlertDialog(onDismissRequest = { discarding = null },
+            title = { Text("Discard pending edit?") }, text = { Text("Export a copy first if you need this edit. Removing it cannot be undone.") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { onDiscardPending(id); discarding = null }) { Text("Discard") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { discarding = null }) { Text("Cancel") } })
+    }
     Scaffold(
         modifier = modifier,
         topBar = {
@@ -121,6 +134,20 @@ fun DashboardScreen(
                 )
             }
 
+            uiState.statusMessage?.let { Text(it, modifier = Modifier.padding(16.dp)) }
+            for (edit in uiState.pendingEdits) {
+                Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Pending edit: ${edit.remoteName}", fontWeight = FontWeight.Bold)
+                        Text(edit.error ?: if (edit.state == "OPEN") "Editing in another app" else "Waiting for upload")
+                        Row {
+                            androidx.compose.material3.TextButton(onClick = { onExportPending(edit.id, edit.remoteName) }) { Text("Export copy") }
+                            if (edit.state == "ERROR") androidx.compose.material3.TextButton(onClick = { onRetryPending(edit.id) }) { Text("Retry upload") }
+                            if (edit.state != "OPEN") androidx.compose.material3.TextButton(onClick = { discarding = edit.id }) { Text("Discard") }
+                        }
+                    }
+                }
+            }
             if (uiState.folderPairs.isEmpty()) {
                 EmptyStateDashboard(onAddPairClicked = onAddPairClicked)
             } else {
@@ -307,6 +334,8 @@ fun HealthBadge(health: SyncHealth) {
         SyncHealth.SYNCING -> Triple(Icons.Default.Sync, Color(0xFF2196F3), "Syncing")
         SyncHealth.HAS_CONFLICTS -> Triple(Icons.Default.SyncProblem, Color(0xFFFF9800), "Conflicts")
         SyncHealth.ERROR -> Triple(Icons.Default.Error, Color(0xFFF44336), "Error")
+        SyncHealth.PENDING_EDITS -> Triple(Icons.Default.Info, Color(0xFFFF9800), "Pending edits")
+        SyncHealth.NOT_SYNCED -> Triple(Icons.Default.Info, Color(0xFF9E9E9E), "Not synced")
         SyncHealth.NOT_CONFIGURED -> Triple(Icons.Default.Info, Color(0xFF9E9E9E), "No Pairs")
     }
 

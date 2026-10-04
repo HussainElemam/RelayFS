@@ -1,6 +1,9 @@
 package io.relayfs.android.core.sync.io
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -31,7 +34,7 @@ object AtomicFileWriter {
             parent.mkdirs()
         }
 
-        val stagingFile = File(parent, ".${destinationFile.name}.sync_tmp")
+        val stagingFile = File(parent, ".relayfs.${java.util.UUID.randomUUID()}.sync_tmp")
 
         try {
             FileOutputStream(stagingFile).use { output ->
@@ -40,6 +43,7 @@ object AtomicFileWriter {
                 var read: Int
 
                 while (source.read(buffer).also { read = it } != -1) {
+                    currentCoroutineContext().ensureActive()
                     output.write(buffer, 0, read)
                     bytesWritten += read
                     onProgress?.invoke(bytesWritten)
@@ -53,12 +57,14 @@ object AtomicFileWriter {
                 output.fd.sync() // Force physical disk flush
             }
 
+            currentCoroutineContext().ensureActive()
             safeReplace(stagingFile, destinationFile)
             destinationFile
         } catch (e: Exception) {
             if (stagingFile.exists()) {
                 stagingFile.delete()
             }
+            if (e is CancellationException) throw e
             throw IOException("Atomic write failed for ${destinationFile.absolutePath}", e)
         }
     }

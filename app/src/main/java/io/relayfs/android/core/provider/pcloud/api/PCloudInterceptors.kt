@@ -8,14 +8,15 @@ import java.io.IOException
  * Injects OAuth 2.0 Bearer authorization header into outgoing HTTP requests.
  */
 class AuthInterceptor(
-    private val tokenProvider: () -> String?
+    private val tokenProvider: () -> String?,
+    private val allowedHosts: Set<String> = setOf("api.pcloud.com", "eapi.pcloud.com")
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val originalRequest = chain.request()
         val token = tokenProvider()
 
-        val request = if (!token.isNullOrBlank() && originalRequest.header("Authorization") == null) {
+        val request = if (!token.isNullOrBlank() && originalRequest.url.isHttps && originalRequest.url.host in allowedHosts && originalRequest.header("Authorization") == null) {
             originalRequest.newBuilder()
                 .header("Authorization", "Bearer $token")
                 .build()
@@ -42,9 +43,8 @@ class RateLimitInterceptor(
 
         while (response.code == 429 && attempt < maxRetries) {
             attempt++
-            response.close()
-
             val retryAfterSeconds = response.header("Retry-After")?.toLongOrNull()
+            response.close()
             val delayMs = if (retryAfterSeconds != null) {
                 (retryAfterSeconds * 1000L).coerceIn(initialDelayMs, maxDelayMs)
             } else {
@@ -52,7 +52,13 @@ class RateLimitInterceptor(
             }
 
             try {
-                Thread.sleep(delayMs)
+                var remaining = delayMs
+                while (remaining > 0) {
+                    if (chain.call().isCanceled()) throw IOException("Request cancelled during rate-limit wait")
+                    val step = minOf(remaining, 100L)
+                    Thread.sleep(step)
+                    remaining -= step
+                }
             } catch (e: InterruptedException) {
                 Thread.currentThread().interrupt()
                 throw IOException("Rate limit retry interrupted", e)
@@ -81,4 +87,3 @@ object TokenRedactingHelper {
         }
     }
 }
-

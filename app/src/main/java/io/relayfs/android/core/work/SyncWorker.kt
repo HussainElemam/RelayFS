@@ -53,7 +53,7 @@ class SyncWorker(
 
         val database = customDatabase ?: AppDatabase.build(applicationContext)
         val providerFactory = customCloudProviderFactory ?: DefaultCloudProviderFactory(
-            EncryptedSharedPrefsTokenStorage(applicationContext)
+            EncryptedSharedPrefsTokenStorage.create(applicationContext)
         )
         val coordinator = SyncCoordinator(
             database = database,
@@ -114,6 +114,8 @@ class SyncWorker(
 
                 if (hasNetworkError) {
                     Result.retry()
+                } else if (results.any { !it.isSuccess }) {
+                    Result.failure(workDataOf(KEY_ERROR_DETAILS to results.filter { !it.isSuccess }.flatMap { it.errorMessages }.joinToString("; ")))
                 } else {
                     val totalUploaded = results.sumOf { it.uploadedCount }
                     val totalDownloaded = results.sumOf { it.downloadedCount }
@@ -136,7 +138,7 @@ class SyncWorker(
             Result.retry()
         } catch (e: Exception) {
             Result.failure(workDataOf(KEY_ERROR_DETAILS to (e.message ?: "Unknown worker error")))
-        }
+        } finally { if (customDatabase == null) database.close() }
     }
 
     private fun isNetworkErrorMessage(message: String): Boolean {

@@ -41,14 +41,14 @@ object LocalScanner {
             } ?: throw SyncException.LocalStorageUnavailable(directory.absolutePath)
 
             for (child in children) {
-                val canonicalChildPath = canonicalPath(child)
-                if (!canonicalChildPath.startsWith(rootPrefix)) {
-                    // Do not follow symbolic links outside the configured sync root.
-                    continue
-                }
-
                 val relativePath = child.relativeTo(localRoot).path.replace('\\', '/')
                 if (pathFilter.shouldExclude(relativePath)) continue
+                val canonicalChildPath = canonicalPath(child)
+                val expectedPath = File(rootCanonicalPath, relativePath).absolutePath
+                if (!canonicalChildPath.startsWith(rootPrefix) || canonicalChildPath != expectedPath) {
+                    // A skipped or aliased tracked path would look deleted. Stop the entire pass.
+                    throw SyncException.LocalStorageUnavailable(child.absolutePath)
+                }
 
                 when {
                     child.isDirectory -> pendingDirectories.add(child)

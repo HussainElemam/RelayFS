@@ -10,7 +10,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 data class OAuthCallbackData(
     val accessToken: String? = null,
     val authCode: String? = null,
-    val locationId: Int = 1 // 1 = US (api.pcloud.com), 2 = EU (eapi.pcloud.com)
+    val locationId: Int = 1,
+    val errorMessage: String? = null // 1 = US (api.pcloud.com), 2 = EU (eapi.pcloud.com)
 ) {
     constructor(authCode: String, locationId: Int) : this(accessToken = null, authCode = authCode, locationId = locationId)
 }

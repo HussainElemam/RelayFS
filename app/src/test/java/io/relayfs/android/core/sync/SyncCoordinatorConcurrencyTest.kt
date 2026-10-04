@@ -52,8 +52,8 @@ class SyncCoordinatorConcurrencyTest {
                 accountId = "account",
                 name = "Serialized Pair",
                 localPath = tempFolder.root.absolutePath,
-                remoteFolderId = "d0",
-                remoteFolderPath = "/"
+                remoteFolderId = "d10",
+                remoteFolderPath = "/Vault"
             )
         )
     }
@@ -93,8 +93,8 @@ class SyncCoordinatorConcurrencyTest {
                 accountId = "account",
                 name = "Missing Root",
                 localPath = missingRoot.absolutePath,
-                remoteFolderId = "d0",
-                remoteFolderPath = "/"
+                remoteFolderId = "d10",
+                remoteFolderPath = "/Vault"
             )
         )
         val factory = object : CloudProviderFactory {
@@ -135,7 +135,7 @@ class SyncCoordinatorConcurrencyTest {
         }
 
         override suspend fun getItemMetadata(remoteId: String) =
-            Result.failure<CloudItem>(UnsupportedOperationException())
+            Result.success(CloudItem(remoteId, "d0", "Vault", "/Vault", true, 0L, 1000L))
 
         override fun supportsDeltaSync() = false
 

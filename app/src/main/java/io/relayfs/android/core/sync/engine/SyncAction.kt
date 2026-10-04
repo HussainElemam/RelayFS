@@ -21,7 +21,8 @@ sealed interface SyncAction {
     data class Upload(
         override val relativePath: String,
         val localItem: LocalItemSnapshot,
-        val parentFolderId: String = "0"
+        val parentFolderId: String = "0",
+        val expectedRemote: RemoteItemSnapshot? = null
     ) : SyncAction
 
     /**
@@ -30,7 +31,8 @@ sealed interface SyncAction {
     data class Download(
         override val relativePath: String,
         val remoteItem: RemoteItemSnapshot,
-        val destinationFile: File
+        val destinationFile: File,
+        val expectedLocal: LocalItemSnapshot? = null
     ) : SyncAction
 
     /**
@@ -39,7 +41,8 @@ sealed interface SyncAction {
     data class DeleteRemote(
         override val relativePath: String,
         val remoteId: String,
-        val isDirectory: Boolean
+        val isDirectory: Boolean,
+        val expectedRemote: RemoteItemSnapshot? = null
     ) : SyncAction
 
     /**
@@ -47,7 +50,8 @@ sealed interface SyncAction {
      */
     data class DeleteLocal(
         override val relativePath: String,
-        val localFile: File
+        val localFile: File,
+        val expectedLocal: LocalItemSnapshot? = null
     ) : SyncAction
 
     /**
@@ -76,7 +80,8 @@ sealed interface SyncAction {
     data class ConflictPreserveLocal(
         override val relativePath: String,
         val localItem: LocalItemSnapshot,
-        val parentFolderId: String = "0"
+        val parentFolderId: String = "0",
+        val expectedRemote: RemoteItemSnapshot? = null
     ) : SyncAction
 
     /**
@@ -85,7 +90,8 @@ sealed interface SyncAction {
     data class ConflictPreserveRemote(
         override val relativePath: String,
         val remoteItem: RemoteItemSnapshot,
-        val destinationFile: File
+        val destinationFile: File,
+        val expectedLocal: LocalItemSnapshot? = null
     ) : SyncAction
 
     /**

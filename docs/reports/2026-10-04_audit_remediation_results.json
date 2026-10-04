@@ -1,0 +1,232 @@
+{
+  "date": "2026-10-04",
+  "baseCommit": "4ce76bcfb647b0bd6b9a900a0a4bca83470e45db",
+  "scope": "uncommitted working tree including pre-existing user changes",
+  "command": "./gradlew testDebugUnitTest lintDebug assembleDebug testReleaseUnitTest assembleRelease --offline -Pksp.incremental=false",
+  "outcome": "BUILD SUCCESSFUL",
+  "liveCloudOrDeviceTested": false,
+  "unitTests": {
+    "debug": {
+      "tests": 283,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "auditCount": 67,
+      "auditSuites": [
+        {
+          "suite": "io.relayfs.android.audit.DatabaseUpgradeRegressionTest",
+          "tests": [
+            "versionTwoUpgradesWithoutLosingPairsBaselinesOrCachedMetadata"
+          ]
+        },
+        {
+          "suite": "io.relayfs.android.audit.HardeningRegressionTest",
+          "tests": [
+            "unverifiedLegacyIdentityCannotRebindExistingData",
+            "pathTraversalAndSymlinkEscapesAreRejectedBeforeWriting",
+            "identicalBytesUseIndependentEndpointHashesWithoutCreatingConflict",
+            "interruptedConflictResolutionRestoresBothCopiesBeforeSyncScan",
+            "remoteChangedWhileCreatingBackupBlocksOverwrite",
+            "verifiedDifferentAccountOrDatacenterCannotReuseFolderPairs",
+            "localEditDuringFalseConflictValidationIsNotRecordedAsAlreadyUploaded",
+            "corruptIndividualCredentialValuesFailClosedWithoutErasingTheStore",
+            "newlyAppearedLocalAndRemoteFilesAreNeverOverwritten",
+            "keystoreFailureRecoversWithoutDeletingOriginalPreferences",
+            "legacyBaselineRequiresCloudRevisionRevalidationAndLongNamesStaySafe",
+            "remoteChangedDuringDownloadCannotReplaceOriginal",
+            "opaqueCloudHashCannotBeMistakenForLocalChecksum",
+            "obsidianToggleActuallyControlsExclusionsButAlwaysProtectsRecovery",
+            "editsToCloudConflictCopyAreUploadedAfterKeepCloudInsteadOfSilentlyAcknowledged",
+            "cancellationStopsPipelineAndReleasesWriterLock",
+            "preserveFailureBlocksRemoteOverwriteAndDelete",
+            "successfulMovedFileDownloadPrecedesDeletionAndRetainsRecovery",
+            "localChangedDuringDownloadRemainsWithDownloadedRecoveryCopy",
+            "pendingUploadBranchesIfCloudWasChangedOrDeleted",
+            "massDeletionBlocksEntirePassBeforeTransferOrDelete",
+            "diffIsBoundedByBytesLinesAndMatrixCells",
+            "deletedBranchCanBeResolvedAndKeepCloudStoresLocalChecksum",
+            "failedMovedFileDownloadLeavesOldLocalCopyAndBaseline",
+            "unversionedDeletionFailsClosed",
+            "failedMovedFileUploadLeavesOldRemoteCopy",
+            "pendingEditsSurviveCacheEvictionAndInterruptedClose",
+            "renamedCloudAliasesAndAncestralRootsCannotSyncOverlappingPairs",
+            "malformedAndDuplicateCloudPathsFailEntireSnapshot",
+            "recoveryDirectorySymlinkCannotMoveUserDataOutsideThePair",
+            "keepCloudSupportsMaximumLengthUnicodeFilenamesAndRetainsLocalBytes",
+            "openPendingDescriptorIsNotRecoveredAsIncomplete",
+            "pendingUploadFailureOrIdentityMismatchRetainsLocalEdit"
+          ]
+        },
+        {
+          "suite": "io.relayfs.android.audit.PCloudBoundaryRegressionTest",
+          "tests": [
+            "folderDeletionUsesServerEnforcedEmptyFolderEndpoint",
+            "explicitEmptyListingIsValidAndUnsignedHashIsPreserved",
+            "cancellationInterruptsDownloadAndPreservesExistingFile",
+            "safeCreationRequestsNoPartialDataAndNonOverwritingName",
+            "incompleteListingsFailClosedIncludingNestedFolders",
+            "rootAndNegativeFolderDeletionNeverReachNetwork",
+            "invalidHashValuesDoNotCoerceToSuccess",
+            "safeRenameCannotOverwriteARacingDestination",
+            "malformedDeleteAcknowledgementIsNotSuccess",
+            "missingMetadataIsDistinctFromTransientNetworkFailure",
+            "productionRejectsCleartextDownloadsBeforeAnyNetworkCall",
+            "cancellationStopsChunkedUploadBeforeSave",
+            "recoveryCopyMustMatchSourceVersionAndUseNoOverwrite",
+            "invalidNamesDuplicatePathsAndMissingTimesFailClosed",
+            "bearerTokenIsScopedToHttpsApiHostsAndAbsentFromDownloads",
+            "fileMetadataUsesStatAndRejectsWrongIdentity"
+          ]
+        },
+        {
+          "suite": "io.relayfs.android.audit.RealDataSafetyAuditTest",
+          "tests": [
+            "remoteEditAfterPlanningMustSurviveDeletion",
+            "localHashChangeMustOverrideEqualSizeAndTimestamp",
+            "localEditAfterPlanningMustSurviveDeletion",
+            "downloadSizeMismatchMustNotReplaceLiveFile",
+            "occupiedConflictFilenameMustNeverBeOverwritten",
+            "cancellationMustStopSubsequentDestructiveActions",
+            "remoteHashChangeMustOverrideEqualSizeAndTimestamp",
+            "refreshedSafMetadataMustInvalidateOldReadContent",
+            "localEditAfterPlanningMustSurviveDownload",
+            "completeSafRefreshMustRemoveDeletedChildren",
+            "validPCloudUnsignedHashMustDeserialize",
+            "smallUploadsMustDisablePartialRemoteCommits",
+            "replacementAtOldPathCannotRebindEstablishedFolder",
+            "downloadHostMustNotReceiveAccountBearerToken",
+            "missingEstablishedRemoteRootMustNotDeleteLocalData",
+            "renamedEstablishedFolderKeepsItsIdentityAndFiles",
+            "malformedSuccessfulListingMustNotMeanAllFilesDeleted"
+          ]
+        }
+      ]
+    },
+    "release": {
+      "tests": 269,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "auditCount": 67,
+      "auditSuites": [
+        {
+          "suite": "io.relayfs.android.audit.DatabaseUpgradeRegressionTest",
+          "tests": [
+            "versionTwoUpgradesWithoutLosingPairsBaselinesOrCachedMetadata"
+          ]
+        },
+        {
+          "suite": "io.relayfs.android.audit.HardeningRegressionTest",
+          "tests": [
+            "unverifiedLegacyIdentityCannotRebindExistingData",
+            "pathTraversalAndSymlinkEscapesAreRejectedBeforeWriting",
+            "identicalBytesUseIndependentEndpointHashesWithoutCreatingConflict",
+            "interruptedConflictResolutionRestoresBothCopiesBeforeSyncScan",
+            "remoteChangedWhileCreatingBackupBlocksOverwrite",
+            "verifiedDifferentAccountOrDatacenterCannotReuseFolderPairs",
+            "localEditDuringFalseConflictValidationIsNotRecordedAsAlreadyUploaded",
+            "corruptIndividualCredentialValuesFailClosedWithoutErasingTheStore",
+            "newlyAppearedLocalAndRemoteFilesAreNeverOverwritten",
+            "keystoreFailureRecoversWithoutDeletingOriginalPreferences",
+            "legacyBaselineRequiresCloudRevisionRevalidationAndLongNamesStaySafe",
+            "remoteChangedDuringDownloadCannotReplaceOriginal",
+            "opaqueCloudHashCannotBeMistakenForLocalChecksum",
+            "obsidianToggleActuallyControlsExclusionsButAlwaysProtectsRecovery",
+            "editsToCloudConflictCopyAreUploadedAfterKeepCloudInsteadOfSilentlyAcknowledged",
+            "cancellationStopsPipelineAndReleasesWriterLock",
+            "preserveFailureBlocksRemoteOverwriteAndDelete",
+            "successfulMovedFileDownloadPrecedesDeletionAndRetainsRecovery",
+            "localChangedDuringDownloadRemainsWithDownloadedRecoveryCopy",
+            "pendingUploadBranchesIfCloudWasChangedOrDeleted",
+            "massDeletionBlocksEntirePassBeforeTransferOrDelete",
+            "diffIsBoundedByBytesLinesAndMatrixCells",
+            "deletedBranchCanBeResolvedAndKeepCloudStoresLocalChecksum",
+            "failedMovedFileDownloadLeavesOldLocalCopyAndBaseline",
+            "unversionedDeletionFailsClosed",
+            "failedMovedFileUploadLeavesOldRemoteCopy",
+            "pendingEditsSurviveCacheEvictionAndInterruptedClose",
+            "renamedCloudAliasesAndAncestralRootsCannotSyncOverlappingPairs",
+            "malformedAndDuplicateCloudPathsFailEntireSnapshot",
+            "recoveryDirectorySymlinkCannotMoveUserDataOutsideThePair",
+            "keepCloudSupportsMaximumLengthUnicodeFilenamesAndRetainsLocalBytes",
+            "openPendingDescriptorIsNotRecoveredAsIncomplete",
+            "pendingUploadFailureOrIdentityMismatchRetainsLocalEdit"
+          ]
+        },
+        {
+          "suite": "io.relayfs.android.audit.PCloudBoundaryRegressionTest",
+          "tests": [
+            "folderDeletionUsesServerEnforcedEmptyFolderEndpoint",
+            "explicitEmptyListingIsValidAndUnsignedHashIsPreserved",
+            "cancellationInterruptsDownloadAndPreservesExistingFile",
+            "safeCreationRequestsNoPartialDataAndNonOverwritingName",
+            "incompleteListingsFailClosedIncludingNestedFolders",
+            "rootAndNegativeFolderDeletionNeverReachNetwork",
+            "invalidHashValuesDoNotCoerceToSuccess",
+            "safeRenameCannotOverwriteARacingDestination",
+            "malformedDeleteAcknowledgementIsNotSuccess",
+            "missingMetadataIsDistinctFromTransientNetworkFailure",
+            "productionRejectsCleartextDownloadsBeforeAnyNetworkCall",
+            "cancellationStopsChunkedUploadBeforeSave",
+            "recoveryCopyMustMatchSourceVersionAndUseNoOverwrite",
+            "invalidNamesDuplicatePathsAndMissingTimesFailClosed",
+            "bearerTokenIsScopedToHttpsApiHostsAndAbsentFromDownloads",
+            "fileMetadataUsesStatAndRejectsWrongIdentity"
+          ]
+        },
+        {
+          "suite": "io.relayfs.android.audit.RealDataSafetyAuditTest",
+          "tests": [
+            "remoteEditAfterPlanningMustSurviveDeletion",
+            "localHashChangeMustOverrideEqualSizeAndTimestamp",
+            "localEditAfterPlanningMustSurviveDeletion",
+            "downloadSizeMismatchMustNotReplaceLiveFile",
+            "occupiedConflictFilenameMustNeverBeOverwritten",
+            "cancellationMustStopSubsequentDestructiveActions",
+            "remoteHashChangeMustOverrideEqualSizeAndTimestamp",
+            "refreshedSafMetadataMustInvalidateOldReadContent",
+            "localEditAfterPlanningMustSurviveDownload",
+            "completeSafRefreshMustRemoveDeletedChildren",
+            "validPCloudUnsignedHashMustDeserialize",
+            "smallUploadsMustDisablePartialRemoteCommits",
+            "replacementAtOldPathCannotRebindEstablishedFolder",
+            "downloadHostMustNotReceiveAccountBearerToken",
+            "missingEstablishedRemoteRootMustNotDeleteLocalData",
+            "renamedEstablishedFolderKeepsItsIdentityAndFiles",
+            "malformedSuccessfulListingMustNotMeanAllFilesDeleted"
+          ]
+        }
+      ]
+    }
+  },
+  "apks": [
+    {
+      "path": "app/build/outputs/apk/debug/app-debug.apk",
+      "bytes": 19346314,
+      "sha256": "156bab65373823c2aaf24d81823f0bb5c726ec0f2eb10c96271b03df3d79a023",
+      "signatureVerified": true
+    },
+    {
+      "path": "app/build/outputs/apk/release/app-release-unsigned.apk",
+      "bytes": 2049948,
+      "sha256": "473d859bd9d93eec40693ed6629deb68ba937a71c394c3f76123eede597beb08",
+      "signatureVerified": false
+    }
+  ],
+  "lint": {
+    "severityCounts": {
+      "Warning": 60
+    },
+    "issueCounts": {
+      "ApplySharedPref": 3,
+      "AndroidGradlePluginVersion": 2,
+      "GradleDependency": 18,
+      "NewerVersionAvailable": 11,
+      "ModifierParameter": 4,
+      "ObsoleteSdkInt": 1,
+      "StaticFieldLeak": 1,
+      "UnusedResources": 7,
+      "UseKtx": 13
+    }
+  }
+}

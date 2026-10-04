@@ -1,5 +1,8 @@
 package io.relayfs.android.ui.pair
 
+import androidx.room.withTransaction
+import io.relayfs.android.core.sync.engine.SyncSafety
+import kotlinx.coroutines.flow.first
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -62,11 +65,12 @@ class FolderPairWizardViewModel(
         }
     }
 
-    fun updateRemotePath(path: String, folderId: String = "d0") {
+    fun updateRemotePath(path: String) {
         _uiState.update {
             it.copy(
                 remoteFolderPath = path.trim(),
-                remoteFolderId = folderId,
+                // A human-readable path is resolved to a provider folder ID by SyncCoordinator.
+                remoteFolderId = "d0",
                 errorMessage = null
             )
         }
@@ -104,8 +108,8 @@ class FolderPairWizardViewModel(
                     }
                 }
                 2 -> {
-                    if (current.remoteFolderPath.isBlank()) {
-                        current.copy(errorMessage = "Please specify the cloud destination path")
+                    if (validateRemotePath(current.remoteFolderPath) != null) {
+                        current.copy(errorMessage = validateRemotePath(current.remoteFolderPath))
                     } else {
                         current.copy(currentStep = 3, errorMessage = null)
                     }
@@ -123,7 +127,8 @@ class FolderPairWizardViewModel(
 
     fun savePair(dispatcher: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO): kotlinx.coroutines.Job {
         val state = _uiState.value
-        val pathError = validateLocalDirectory(state.localPath)
+        if (state.isSaving || state.isSavedSuccess) return completedJob()
+        val pathError = validateLocalDirectory(state.localPath) ?: validateRemotePath(state.remoteFolderPath)
         if (pathError != null) {
             _uiState.update { it.copy(errorMessage = pathError) }
             return completedJob()
@@ -133,17 +138,17 @@ class FolderPairWizardViewModel(
             return completedJob()
         }
 
+        _uiState.update { it.copy(isSaving = true, errorMessage = null) }
         return viewModelScope.launch(dispatcher) {
-            _uiState.update { it.copy(isSaving = true, errorMessage = null) }
 
             val pairId = UUID.randomUUID().toString()
             val entity = FolderPairEntity(
                 id = pairId,
                 accountId = accountId,
                 name = state.name.trim(),
-                localPath = state.localPath.trim(),
+                localPath = File(state.localPath.trim()).canonicalPath,
                 remoteFolderId = state.remoteFolderId,
-                remoteFolderPath = state.remoteFolderPath.trim(),
+                remoteFolderPath = "/" + state.remoteFolderPath.trim().trim('/').split('/').filter { it.isNotEmpty() }.joinToString("/"),
                 syncDirection = state.syncDirection,
                 isEnabled = true,
                 isObsidianVault = state.isObsidianVault,
@@ -153,14 +158,27 @@ class FolderPairWizardViewModel(
             )
 
             try {
-                database.folderPairDao().insert(entity)
+                SyncSafety.exclusive { database.withTransaction {
+                    val pairs = database.folderPairDao().getAllFlow().first()
+                    require(pairs.none { SyncSafety.overlap(File(it.localPath).canonicalPath, entity.localPath) }) { "Local folder overlaps an existing folder pair" }
+                    require(pairs.none { it.accountId == accountId && SyncSafety.overlap(it.remoteFolderPath, entity.remoteFolderPath) }) { "Cloud folder overlaps an existing folder pair" }
+                    database.folderPairDao().insert(entity)
+                } }
                 syncScheduler.schedulePeriodicSync(entity)
                 syncScheduler.triggerImmediateSync(entity.id)
                 _uiState.update { it.copy(isSaving = false, isSavedSuccess = true) }
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) {
                 _uiState.update { it.copy(isSaving = false, errorMessage = "Failed to save: ${e.message}") }
             }
         }
+    }
+
+    private fun validateRemotePath(path: String): String? {
+        val segments = path.trim().split('/').filter { it.isNotEmpty() }
+        if (segments.isEmpty()) return "Choose a dedicated cloud folder; account-root sync is disabled"
+        if (segments.any { it.isBlank() || it == "." || it == ".." || '\\' in it || '\u0000' in it }) return "Cloud path contains an invalid segment"
+        return null
     }
 
     private fun validateLocalDirectory(path: String): String? {

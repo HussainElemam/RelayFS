@@ -1,0 +1,68 @@
+{
+  "tests": 15,
+  "failures": 15,
+  "environment": "Isolated app source copy; Robolectric API 34; fake providers and localhost HTTP only",
+  "expectations": "Safety assertions; failures demonstrate unsafe current behavior. Not part of the ordinary suite.",
+  "results": [
+    {
+      "test": "remoteEditAfterPlanningMustSurviveDeletion",
+      "failure": "java.lang.AssertionError: Remote version was never rechecked before deletion"
+    },
+    {
+      "test": "localHashChangeMustOverrideEqualSizeAndTimestamp",
+      "failure": "java.lang.AssertionError: expected:<MODIFIED> but was:<NONE>"
+    },
+    {
+      "test": "localEditAfterPlanningMustSurviveDeletion",
+      "failure": "java.lang.AssertionError: A stale delete action erased a newer local edit"
+    },
+    {
+      "test": "downloadSizeMismatchMustNotReplaceLiveFile",
+      "failure": "java.lang.AssertionError: Real pCloud download accepted 4 bytes although snapshot advertised 100; live content=oops"
+    },
+    {
+      "test": "occupiedConflictFilenameMustNeverBeOverwritten",
+      "failure": "org.junit.ComparisonFailure: expected:<[previous unique conflict edits]> but was:<[remote!!]>"
+    },
+    {
+      "test": "cancellationMustStopSubsequentDestructiveActions",
+      "failure": "java.lang.AssertionError: Pipeline swallowed cancellation and continued to delete another file"
+    },
+    {
+      "test": "remoteHashChangeMustOverrideEqualSizeAndTimestamp",
+      "failure": "java.lang.AssertionError: expected:<MODIFIED> but was:<NONE>"
+    },
+    {
+      "test": "refreshedSafMetadataMustInvalidateOldReadContent",
+      "failure": "org.junit.ComparisonFailure: expected:<[updated!]> but was:<[original]>"
+    },
+    {
+      "test": "localEditAfterPlanningMustSurviveDownload",
+      "failure": "org.junit.ComparisonFailure: expected:<[new local work after scan]> but was:<[remote!!]>"
+    },
+    {
+      "test": "completeSafRefreshMustRemoveDeletedChildren",
+      "failure": "java.lang.AssertionError: Deleted cloud documents remain browsable"
+    },
+    {
+      "test": "validPCloudUnsignedHashMustDeserialize",
+      "failure": "java.lang.AssertionError: Valid pCloud hash exceeds signed Long: Unexpected JSON token at offset 25: Numeric value overflow at path: $.hash\nJSON input: {\"fileid\":1729212,\"hash\":10681749967730527559,\"name\":\"photo.jpg\"}"
+    },
+    {
+      "test": "smallUploadsMustDisablePartialRemoteCommits",
+      "failure": "java.lang.AssertionError: expected:<1> but was:<null>"
+    },
+    {
+      "test": "downloadHostMustNotReceiveAccountBearerToken",
+      "failure": "java.lang.AssertionError: Bearer credential is attached to every download host expected null, but was:<Bearer audit-fake-secret>"
+    },
+    {
+      "test": "missingEstablishedRemoteRootMustNotDeleteLocalData",
+      "failure": "java.lang.AssertionError: Missing established remote root should fail closed, not recreate it and delete local data. Deleted=1"
+    },
+    {
+      "test": "malformedSuccessfulListingMustNotMeanAllFilesDeleted",
+      "failure": "java.lang.AssertionError: Invalid listing was accepted and 1 local files deleted"
+    }
+  ]
+}

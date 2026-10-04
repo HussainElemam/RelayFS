@@ -10,6 +10,7 @@ import io.relayfs.android.core.provider.CloudProvider
 import io.relayfs.android.core.provider.pcloud.api.PCloudApiClient
 import io.relayfs.android.core.provider.pcloud.api.PCloudDiffEntry
 import io.relayfs.android.core.provider.pcloud.api.PCloudItemMetadata
+import io.relayfs.android.core.sync.engine.cancellableResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -29,7 +30,7 @@ class PCloudProvider(
     override val providerType: ProviderType = ProviderType.PCLOUD
 
     override suspend fun verifyConnection(): Result<CloudAccount> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val response = apiClient.apiService.getUserInfo()
             val body = response.body()
             if (!response.isSuccessful || body == null || body.result != 0) {
@@ -51,7 +52,7 @@ class PCloudProvider(
         remoteFolderId: String,
         recursive: Boolean
     ): Result<List<CloudItem>> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val folderIdLong = parseFolderId(remoteFolderId)
             val response = apiClient.apiService.listFolder(
                 folderId = folderIdLong,
@@ -62,7 +63,9 @@ class PCloudProvider(
                 throw IOException("listFolder failed: ${body?.error ?: response.message()}")
             }
 
-            val metadata = body.metadata ?: return@runCatching emptyList<CloudItem>()
+            val metadata = body.metadata ?: throw IOException("Incomplete folder listing: no metadata")
+            require(metadata.isfolder && metadata.canonicalId == "d$folderIdLong") { "Folder identity changed" }
+            validateListing(metadata, recursive)
             val resultList = mutableListOf<CloudItem>()
             collectItemsRecursively(metadata, currentPath = "", resultList = resultList, isRoot = true)
             resultList
@@ -70,7 +73,7 @@ class PCloudProvider(
     }
 
     override suspend fun getItemMetadata(remoteId: String): Result<CloudItem> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val isFolder = remoteId.startsWith("d") || remoteId == "0"
             if (isFolder) {
                 val folderId = parseFolderId(remoteId)
@@ -80,28 +83,19 @@ class PCloudProvider(
                     throw IOException("getItemMetadata folder failed: ${body?.error ?: response.message()}")
                 }
                 val meta = body.metadata ?: throw IOException("No metadata for folder $remoteId")
+                require(meta.isfolder && meta.canonicalId == "d$folderId") { "Folder identity changed" }
                 meta.toCloudItem(meta.path ?: "/${meta.name}")
             } else {
                 val fileId = parseFileId(remoteId)
-                // For files, query link to verify existence or inspect metadata
-                val linkResponse = apiClient.apiService.getFileLink(fileId)
-                val linkBody = linkResponse.body()
-                if (!linkResponse.isSuccessful || linkBody == null || linkBody.result != 0) {
-                    throw IOException("getItemMetadata file failed: ${linkBody?.error ?: linkResponse.message()}")
+                val response = apiClient.apiService.stat(fileId)
+                val body = response.body()
+                if (!response.isSuccessful || body == null || body.result != 0) {
+                    if (body?.result == 2009) throw java.io.FileNotFoundException("Cloud file no longer exists")
+                    throw IOException("stat failed: ${body?.error ?: response.message()}")
                 }
-                // Construct file item
-                val fileName = linkBody.path.substringAfterLast('/')
-                CloudItem(
-                    id = "f$fileId",
-                    parentId = null,
-                    name = fileName,
-                    path = linkBody.path,
-                    isDirectory = false,
-                    sizeBytes = 0L,
-                    modifiedTimeMillis = System.currentTimeMillis(),
-                    contentHash = null,
-                    mimeType = null
-                )
+                val meta = body.metadata ?: throw IOException("Missing file metadata")
+                require(!meta.isfolder && meta.canonicalId == "f$fileId") { "File identity changed" }
+                meta.toCloudItem(meta.path ?: "/${meta.name}")
             }
         }
     }
@@ -109,7 +103,7 @@ class PCloudProvider(
     override fun supportsDeltaSync(): Boolean = true
 
     override suspend fun getDeltaChanges(sinceToken: String?): Result<DeltaChanges> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val diffId = sinceToken?.toLongOrNull()
             val response = apiClient.apiService.getDiff(
                 diffId = diffId,
@@ -123,7 +117,7 @@ class PCloudProvider(
             val newCursorToken = body.diffid.toString()
             if (diffId == null) {
                 // Baseline query: returns cursor only without replaying history
-                return@runCatching DeltaChanges(
+                return@cancellableResult DeltaChanges(
                     newCursorToken = newCursorToken,
                     changes = emptyList(),
                     hasMore = false
@@ -147,7 +141,7 @@ class PCloudProvider(
         destinationFile: File,
         progress: ((bytesRead: Long, totalBytes: Long) -> Unit)?
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val fileId = parseFileId(remoteId)
             val linkResponse = apiClient.apiService.getFileLink(fileId)
             val linkBody = linkResponse.body()
@@ -168,7 +162,7 @@ class PCloudProvider(
         remoteName: String,
         progress: ((bytesWritten: Long, totalBytes: Long) -> Unit)?
     ): Result<CloudItem> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val folderId = parseFolderId(parentFolderId)
             val metadata = if (file.length() > PCloudApiClient.CHUNKED_UPLOAD_THRESHOLD) {
                 apiClient.uploadFileChunked(folderId, file, remoteName, progress = progress).getOrThrow()
@@ -181,11 +175,18 @@ class PCloudProvider(
         }
     }
 
+    override suspend fun uploadNewFile(parentFolderId: String, file: File, remoteName: String): Result<CloudItem> = withContext(Dispatchers.IO) {
+        cancellableResult {
+            val meta = apiClient.uploadFileSinglePart(parseFolderId(parentFolderId), file, remoteName, renameIfExists = true).getOrThrow()
+            meta.toCloudItem(meta.path ?: "/${meta.name}")
+        }
+    }
+
     override suspend fun createFolder(
         parentFolderId: String,
         folderName: String
     ): Result<CloudItem> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val folderId = parseFolderId(parentFolderId)
             val response = apiClient.apiService.createFolder(parentFolderId = folderId, name = folderName)
             val body = response.body()
@@ -203,7 +204,7 @@ class PCloudProvider(
         newParentFolderId: String,
         newName: String
     ): Result<CloudItem> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val isFolder = remoteId.startsWith("d")
             val targetFolderId = parseFolderId(newParentFolderId)
 
@@ -215,12 +216,19 @@ class PCloudProvider(
                     toName = newName
                 )
             } else {
-                val fileId = parseFileId(remoteId)
-                apiClient.apiService.renameFile(
-                    fileId = fileId,
-                    toFolderId = targetFolderId,
-                    toName = newName
-                )
+                // renamefile overwrites a destination that races the listing. copyfile(noover=1) cannot.
+                val before = getItemMetadata(remoteId).getOrThrow()
+                if (before.parentId == newParentFolderId && before.name == newName) return@cancellableResult before
+                val copiedResponse = apiClient.apiService.copyFile(parseFileId(remoteId), targetFolderId, newName)
+                val copiedBody = copiedResponse.body()
+                if (!copiedResponse.isSuccessful || copiedBody == null || copiedBody.result != 0 || copiedBody.metadata == null) throw IOException("Destination already exists or safe copy failed")
+                val copy = copiedBody.metadata.toCloudItem("/$newName")
+                require(copy.sizeBytes == before.sizeBytes && copy.contentHash == before.contentHash) { "Source changed during move; both copies retained" }
+                preserveFile(remoteId).getOrThrow()
+                val after = getItemMetadata(remoteId).getOrThrow()
+                require(after.sizeBytes == before.sizeBytes && after.contentHash == before.contentHash && after.modifiedTimeMillis == before.modifiedTimeMillis) { "Source changed during move; both copies retained" }
+                deleteItem(remoteId, false).getOrThrow()
+                return@cancellableResult copy
             }
 
             val body = response.body()
@@ -238,11 +246,12 @@ class PCloudProvider(
         isDirectory: Boolean
     ): Result<Unit> = withContext(Dispatchers.IO) {
         if (remoteId.isBlank()) return@withContext Result.success(Unit)
-        runCatching {
+        cancellableResult {
             val isFolder = isDirectory || remoteId.startsWith("d")
             val response = if (isFolder) {
                 val folderId = parseFolderId(remoteId)
-                apiClient.apiService.deleteFolderRecursive(folderId)
+                require(folderId > 0L) { "Refusing to delete pCloud root" }
+                apiClient.apiService.deleteFolder(folderId)
             } else {
                 val fileId = parseFileId(remoteId)
                 apiClient.apiService.deleteFile(fileId)
@@ -254,7 +263,7 @@ class PCloudProvider(
                 // 2005: Directory does not exist, 2009: File not found, 2010: Invalid path/id, 404: HTTP Not Found
                 // Idempotent delete: if already deleted or missing on pCloud, treat as success
                 if (pCloudResult == 2005 || pCloudResult == 2009 || pCloudResult == 2010 || response.code() == 404) {
-                    return@runCatching
+                    return@cancellableResult
                 }
                 throw IOException("deleteItem failed: ${body?.error ?: response.message()}")
             }
@@ -267,7 +276,7 @@ class PCloudProvider(
         height: Int,
         destinationFile: File
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val fileId = parseFileId(remoteId)
             val size = "${width}x${height}"
             val response = apiClient.apiService.getThumbLink(fileId = fileId, size = size)
@@ -278,6 +287,36 @@ class PCloudProvider(
             val downloadUrl = body.downloadUrl
                 ?: throw IOException("No thumbnail CDN host returned for file $remoteId")
             apiClient.downloadFileStream(downloadUrl, destinationFile).getOrThrow()
+        }
+    }
+
+    override suspend fun preserveFile(remoteId: String): Result<Unit> = withContext(Dispatchers.IO) {
+        cancellableResult {
+            val before = getItemMetadata(remoteId).getOrThrow()
+            val rootItems = listFolder("d0", false).getOrThrow()
+            val recovery = rootItems.firstOrNull { it.isDirectory && it.name == ".relayfs-recovery" }
+                ?: createFolder("d0", ".relayfs-recovery").getOrThrow()
+            val response = apiClient.apiService.copyFile(parseFileId(remoteId), parseFolderId(recovery.id),
+                "${remoteId}-${java.util.UUID.randomUUID()}-${before.name.take(30)}")
+            val body = response.body()
+            if (!response.isSuccessful || body == null || body.result != 0 || body.metadata == null) {
+                throw IOException("Could not preserve remote file; refusing destructive operation")
+            }
+            val copy = body.metadata.toCloudItem("/.relayfs-recovery/${body.metadata.name}")
+            require(!copy.isDirectory && copy.sizeBytes == before.sizeBytes && (before.contentHash == null || copy.contentHash == before.contentHash)) { "Cloud changed while creating recovery copy" }
+        }
+    }
+
+    private fun validateListing(root: PCloudItemMetadata, recursive: Boolean) {
+        val children = root.contents ?: throw IOException("Incomplete folder contents")
+        val names = mutableSetOf<String>()
+        children.forEach { item ->
+            require(item.name.isNotBlank() && item.name != "." && item.name != ".." &&
+                !item.name.contains('/') && !item.name.contains('\\')) { "Invalid remote name" }
+            require(names.add(item.name)) { "Ambiguous remote paths" }
+            require(if (item.isfolder) item.folderid != null && item.folderid > 0 else item.fileid != null && item.fileid > 0) { "Missing remote identity" }
+            require(item.isfolder || item.size >= 0L) { "Invalid remote size" }
+            if (recursive && item.isfolder) validateListing(item, true)
         }
     }
 
@@ -298,14 +337,15 @@ class PCloudProvider(
     }
 
     private fun PCloudItemMetadata.toCloudItem(canonicalPath: String): CloudItem {
+        require(if (isfolder) folderid != null && folderid >= 0 else fileid != null && fileid > 0 && size >= 0 && modified != null) { "Incomplete cloud metadata" }
         return CloudItem(
             id = canonicalId,
             parentId = parentfolderid?.let { "d$it" },
             name = name,
             path = canonicalPath.ifBlank { "/$name" },
             isDirectory = isfolder,
-            sizeBytes = size,
-            modifiedTimeMillis = parseModifiedTime(modified),
+            sizeBytes = if (isfolder) 0L else size,
+            modifiedTimeMillis = if (isfolder && modified == null) 0L else parseModifiedTime(modified),
             contentHash = hash?.toString(),
             mimeType = contenttype
         )
@@ -321,33 +361,29 @@ class PCloudProvider(
         }
         val path = meta.path ?: "/${meta.name}"
         return CloudChange(
-            item = meta.toCloudItem(path),
+            item = if (changeType == ChangeType.DELETED) CloudItem(meta.canonicalId, meta.parentfolderid?.let { "d$it" }, meta.name, path, meta.isfolder, maxOf(meta.size, 0L), time?.let { parseModifiedTime(it) } ?: 0L, meta.hash) else meta.toCloudItem(path),
             changeType = changeType
         )
     }
 
     companion object {
         fun parseFolderId(rawId: String): Long {
-            return rawId.removePrefix("d").toLongOrNull()
-                ?: throw IllegalArgumentException("Invalid folder remote id: $rawId")
+            return (rawId.removePrefix("d").toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid folder remote id: $rawId")).also { require(it >= 0L) }
         }
 
         fun parseFileId(rawId: String): Long {
-            return rawId.removePrefix("f").toLongOrNull()
-                ?: throw IllegalArgumentException("Invalid file remote id: $rawId")
+            return (rawId.removePrefix("f").toLongOrNull()
+                ?: throw IllegalArgumentException("Invalid file remote id: $rawId")).also { require(it > 0L) }
         }
 
         fun parseModifiedTime(dateString: String?): Long {
-            if (dateString.isNullOrBlank()) return System.currentTimeMillis()
-            return try {
-                // pCloud returns RFC 2822: "Mon, 14 Sep 2026 12:00:00 +0000"
-                val format = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US).apply {
-                    timeZone = TimeZone.getTimeZone("UTC")
-                }
-                format.parse(dateString)?.time ?: System.currentTimeMillis()
-            } catch (_: Exception) {
-                System.currentTimeMillis()
+            require(!dateString.isNullOrBlank()) { "Missing cloud modification time" }
+            val format = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss Z", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("UTC")
+                isLenient = false
             }
+            return format.parse(dateString)?.time ?: throw IOException("Invalid cloud modification time")
         }
     }
 }

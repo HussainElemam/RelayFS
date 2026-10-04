@@ -1,5 +1,6 @@
 package io.relayfs.android.core.work
 
+import androidx.room.withTransaction
 import android.content.Context
 import android.provider.DocumentsContract
 import androidx.work.Constraints
@@ -18,6 +19,7 @@ import io.relayfs.android.core.security.EncryptedSharedPrefsTokenStorage
 import io.relayfs.android.ui.accounts.AccountsViewModel
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.ensureActive
 
 /**
  * Worker responsible for uploading modified or newly created files from the
@@ -28,95 +30,88 @@ class CloudUploadWorker(
     workerParams: WorkerParameters
 ) : CoroutineWorker(appContext, workerParams) {
 
-    override suspend fun doWork(): Result {
-        val documentId = inputData.getString(KEY_DOCUMENT_ID) ?: return Result.failure()
-        val localFilePath = inputData.getString(KEY_LOCAL_FILE_PATH) ?: return Result.failure()
-        val localFile = File(localFilePath)
-        if (!localFile.exists()) {
-            return Result.failure()
-        }
-
-        val accountId = inputData.getString(KEY_ACCOUNT_ID) ?: AccountsViewModel.DEFAULT_ACCOUNT_ID
+    override suspend fun doWork(): Result = io.relayfs.android.core.sync.engine.SyncSafety.exclusive {
         val database = customDatabase ?: AppDatabase.build(applicationContext)
-        val providerFactory = customCloudProviderFactory ?: DefaultCloudProviderFactory(
-            EncryptedSharedPrefsTokenStorage(applicationContext)
-        )
-
-        val cloudProvider = providerFactory.getProvider(accountId)
-            ?: return Result.failure()
-
-        val safDao = database.safMetadataDao()
-        val cachedEntity = safDao.getById(documentId)
-
-        val parentFolderId = inputData.getString(KEY_PARENT_FOLDER_ID)
-            ?: cachedEntity?.parentDocumentId
-            ?: "d0"
-        val remoteName = inputData.getString(KEY_REMOTE_NAME)
-            ?: cachedEntity?.displayName
-            ?: localFile.name
-
-        return try {
-            val uploadResult = cloudProvider.uploadFile(
-                parentFolderId = parentFolderId,
-                file = localFile,
-                remoteName = remoteName
-            )
-
-            if (uploadResult.isSuccess) {
-                val cloudItem = uploadResult.getOrThrow()
-                val updatedEntity = (cachedEntity ?: SafMetadataEntity(
-                    documentId = cloudItem.id,
-                    parentDocumentId = parentFolderId,
-                    accountId = accountId,
-                    displayName = cloudItem.name,
-                    mimeType = cloudItem.mimeType ?: "application/octet-stream",
-                    isDirectory = false
-                )).copy(
-                    documentId = cloudItem.id,
-                    displayName = cloudItem.name,
-                    sizeBytes = cloudItem.sizeBytes,
-                    lastModified = cloudItem.modifiedTimeMillis,
-                    cachedAt = System.currentTimeMillis()
-                )
-
-                safDao.insertOrUpdate(updatedEntity)
-
-                // Dispatch notification to DocumentsUI
-                val authority = "${applicationContext.packageName}.documents"
-                val docUri = DocumentsContract.buildDocumentUri(authority, updatedEntity.documentId)
-                val parentUri = DocumentsContract.buildChildDocumentsUri(authority, parentFolderId)
-                applicationContext.contentResolver.notifyChange(docUri, null)
-                applicationContext.contentResolver.notifyChange(parentUri, null)
-
-                runCatching { deleteSafStagingFile(localFile) }
-
-                Result.success()
-            } else {
-                val error = uploadResult.exceptionOrNull()
-                if (error is IOException) {
-                    Result.retry()
-                } else {
-                    Result.failure()
-                }
+        try {
+            val dao = database.pendingUploadDao()
+            val rowId = inputData.getString(KEY_PENDING_ID)
+            var row = rowId?.let { dao.get(it) }
+            if (row == null && rowId == null) {
+                // Upgrade legacy queued jobs into the durable journal before attempting any network write.
+                val doc = inputData.getString(KEY_DOCUMENT_ID) ?: return@exclusive Result.failure()
+                val path = inputData.getString(KEY_LOCAL_FILE_PATH) ?: return@exclusive Result.failure()
+                val file = File(path)
+                if (!file.exists()) return@exclusive Result.failure()
+                val meta = database.safMetadataDao().getById(doc) ?: return@exclusive Result.failure()
+                row = io.relayfs.android.core.saf.PendingEdits.begin(applicationContext, database, meta, null, file)
+                dao.setState(row.id, "READY")
+                row = row.copy(state = "READY")
             }
-        } catch (e: Exception) {
-            if (e is IOException) {
-                Result.retry()
-            } else {
-                Result.failure()
+            val edit = row ?: return@exclusive Result.success()
+            if (edit.state != "READY") return@exclusive Result.failure()
+            val file = File(edit.localPath)
+            if (!file.isFile) {
+                dao.setState(edit.id, "ERROR", "Pending edit is missing. Restore or export another copy.")
+                return@exclusive Result.failure()
             }
-        }
-    }
-
-    private fun deleteSafStagingFile(file: File) {
-        val stagingRoot = File(applicationContext.cacheDir, "saf_cache/staging").canonicalFile
-        val candidate = file.canonicalFile
-        if (candidate.parentFile == stagingRoot) {
-            candidate.delete()
-        }
+            val storage = customTokenStorage ?: EncryptedSharedPrefsTokenStorage.create(applicationContext)
+            val factory = customCloudProviderFactory ?: DefaultCloudProviderFactory(storage)
+            val provider = factory.getProvider(edit.accountId)
+            if (provider == null) {
+                dao.setState(edit.id, "ERROR", "Reconnect the same cloud account, then retry. Your edit is retained.")
+                return@exclusive Result.failure()
+            }
+            if ((customCloudProviderFactory == null || customTokenStorage != null) && (edit.accountIdentity == null || edit.accountIdentity != storage.getIdentity(edit.accountId))) {
+                dao.setState(edit.id, "ERROR", "Account identity does not match this edit. Export it to recover your work.")
+                return@exclusive Result.failure()
+            }
+            val expected = io.relayfs.android.core.sync.engine.RemoteItemSnapshot(edit.remoteName, edit.documentId,
+                edit.expectedSize, edit.expectedModified, edit.expectedHash)
+            val current = provider.getItemMetadata(edit.documentId)
+            val absent = current.exceptionOrNull() is java.io.FileNotFoundException
+            if (current.isFailure && !absent) current.getOrThrow()
+            var changed = absent || !io.relayfs.android.core.sync.engine.FileSafety.remoteMatches(current.getOrThrow(), expected)
+            if (!changed) {
+                provider.preserveFile(edit.documentId).getOrThrow()
+                val afterBackup = provider.getItemMetadata(edit.documentId).getOrThrow()
+                changed = !io.relayfs.android.core.sync.engine.FileSafety.remoteMatches(afterBackup, expected)
+            }
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            val name = if (changed) io.relayfs.android.core.sync.engine.ConflictResolver.generateConflictFilename(edit.remoteName) else edit.remoteName
+            val item = (if (changed) provider.uploadNewFile(edit.parentFolderId, file, name)
+                else provider.uploadFile(edit.parentFolderId, file, name)).getOrThrow()
+            if (item.sizeBytes != file.length()) throw IOException("Cloud upload size mismatch; local edit retained")
+            database.withTransaction {
+            database.safMetadataDao().insertOrUpdate(
+                io.relayfs.android.core.saf.CloudDocumentsProvider.run {
+                    item.toSafEntity(edit.parentFolderId, edit.accountId)
+                })
+            database.pendingUploadDao().delete(edit.id)
+            }
+            file.delete()
+            File(applicationContext.cacheDir, "saf_cache/read/${edit.documentId}").delete()
+            val authority = "${applicationContext.packageName}.documents"
+            applicationContext.contentResolver.notifyChange(DocumentsContract.buildChildDocumentsUri(authority, edit.parentFolderId), null)
+            Result.success()
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
+            val id = inputData.getString(KEY_PENDING_ID)
+            if (id != null) database.pendingUploadDao().setState(id, if (e is IOException) "READY" else "ERROR", e.message)
+            if (e is IOException) Result.retry() else Result.failure()
+        } finally { if (customDatabase == null) database.close() }
     }
 
     companion object {
+        const val KEY_PENDING_ID = "pending_id"
+        const val TAG_UPLOAD = "relayfs_saf_upload"
+        fun enqueuePending(context: Context, pendingId: String, accountId: String, documentId: String) {
+            val request = OneTimeWorkRequestBuilder<CloudUploadWorker>()
+                .setInputData(workDataOf(KEY_PENDING_ID to pendingId))
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .addTag(TAG_UPLOAD).build()
+            WorkManager.getInstance(context).enqueueUniqueWork("saf_pending_$pendingId", ExistingWorkPolicy.KEEP, request)
+        }
+
         const val KEY_DOCUMENT_ID = "key_document_id"
         const val KEY_LOCAL_FILE_PATH = "key_local_file_path"
         const val KEY_PARENT_FOLDER_ID = "key_parent_folder_id"
@@ -125,6 +120,9 @@ class CloudUploadWorker(
 
         @Volatile
         var customDatabase: AppDatabase? = null
+
+        @Volatile
+        var customTokenStorage: io.relayfs.android.core.security.TokenStorage? = null
 
         @Volatile
         var customCloudProviderFactory: CloudProviderFactory? = null
@@ -147,6 +145,7 @@ class CloudUploadWorker(
                         KEY_ACCOUNT_ID to accountId
                     )
                 )
+                .addTag(TAG_UPLOAD)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)

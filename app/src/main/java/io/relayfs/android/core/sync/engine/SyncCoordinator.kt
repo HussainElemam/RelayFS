@@ -11,13 +11,11 @@ import io.relayfs.android.core.provider.CloudProvider
 import io.relayfs.android.core.provider.CloudProviderFactory
 import io.relayfs.android.core.service.SyncNotificationManager
 import io.relayfs.android.core.watcher.filter.PathFilter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
-import java.util.concurrent.ConcurrentHashMap
 
 /**
  * High-level coordinator that orchestrates end-to-end synchronization passes:
@@ -31,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap
 class SyncCoordinator(
     private val database: AppDatabase,
     private val cloudProviderFactory: CloudProviderFactory,
-    private val pathFilter: PathFilter = PathFilter(),
+    private val pathFilter: PathFilter? = null,
     private val context: Context? = null
 ) {
 
@@ -41,7 +39,7 @@ class SyncCoordinator(
     suspend fun syncFolderPair(
         folderPairId: String,
         onProgress: ((title: String, detail: String, current: Int, total: Int) -> Unit)? = null
-    ): SyncResult = mutexFor(folderPairId).withLock {
+    ): SyncResult = SyncSafety.exclusive { SyncActivity.track {
         withContext(Dispatchers.IO) {
             val folderPair = database.folderPairDao().getById(folderPairId)
                 ?: return@withContext SyncResult(
@@ -62,6 +60,17 @@ class SyncCoordinator(
                 )
             }
 
+            val overlap = database.folderPairDao().getAllFlow().first().any {
+                it.id != folderPair.id && (SyncSafety.overlap(File(it.localPath).canonicalPath, File(folderPair.localPath).canonicalPath) ||
+                    (it.accountId == folderPair.accountId && SyncSafety.overlap(it.remoteFolderPath, folderPair.remoteFolderPath)))
+            }
+            if (overlap) {
+                logSyncResult(folderPairId, false, "Overlapping folder pairs must be separated before syncing")
+                return@withContext SyncResult(folderPairId, System.currentTimeMillis(), System.currentTimeMillis(), false,
+                    errorCount = 1, errorMessages = listOf("Overlapping folder pairs must be separated before syncing"))
+            }
+            ConflictResolutionManager(database).recoverInterrupted(folderPairId)
+            val pairFilter = pathFilter ?: PathFilter(obsidianMode = folderPair.isObsidianVault)
             val localRoot = File(folderPair.localPath)
             val localRootIsReadable = try {
                 localRoot.exists() && localRoot.isDirectory && localRoot.canRead()
@@ -99,7 +108,7 @@ class SyncCoordinator(
 
             // 1. Scan local items
             val localItems = try {
-                scanLocalFiles(localRoot, pathFilter)
+                scanLocalFiles(localRoot, pairFilter)
             } catch (e: SyncException.LocalStorageUnavailable) {
                 val errorMsg = e.message ?: "Local storage became unavailable during scanning"
                 logSyncResult(folderPairId, false, errorMsg)
@@ -113,12 +122,83 @@ class SyncCoordinator(
                 )
             }
 
-            // 2. Fetch remote items
-            val remoteListResult = cloudProvider.listFolder(folderPair.remoteFolderId, recursive = true)
+            // 2. Resolve the configured human-readable remote path to a provider folder ID.
+            // This must complete before listing or executing actions so a non-root pair can never
+            // accidentally read from or write to the provider root.
+            val resolvedRemoteFolder = try {
+                if (folderPair.remoteFolderPath.trim().trim('/') == "") throw IOException("Choose a dedicated cloud folder; account-root sync is disabled")
+                if (folderPair.remoteFolderId != "d0" && folderPair.remoteFolderId != "0") {
+                    val current = cloudProvider.getItemMetadata(folderPair.remoteFolderId).getOrThrow()
+                    if (!current.isDirectory || current.id != folderPair.remoteFolderId) throw IOException("Established remote folder is unavailable; sync stopped")
+                    ResolvedRemoteFolder(current.id, folderPair.remoteFolderPath)
+                } else {
+                    val established = database.syncBaselineDao().getCountForFolderPair(folderPairId) > 0
+                    resolveRemoteFolderPath(cloudProvider, folderPair.remoteFolderPath, allowCreate = !established)
+                }
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                val errorMsg = "Failed to resolve remote folder '${folderPair.remoteFolderPath}': ${e.message}"
+                logSyncResult(folderPairId, false, errorMsg)
+                if (e is IOException) {
+                    throw e
+                }
+                return@withContext SyncResult(
+                    folderPairId = folderPairId,
+                    startTimeMillis = System.currentTimeMillis(),
+                    endTimeMillis = System.currentTimeMillis(),
+                    isSuccess = false,
+                    errorCount = 1,
+                    errorMessages = listOf(errorMsg)
+                )
+            }
+
+            // Paths may become stale after a cloud rename. Compare persistent IDs and ancestry too.
+            try {
+                val otherRoots = database.folderPairDao().getAllFlow().first().filter {
+                    it.id != folderPairId && it.accountId == folderPair.accountId &&
+                        it.remoteFolderId != "d0" && it.remoteFolderId != "0"
+                }.map { it.remoteFolderId }
+                requireDisjointRemoteRoots(cloudProvider, resolvedRemoteFolder.id, otherRoots)
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                val message = "Cannot verify separate cloud folders: ${e.message}"
+                logSyncResult(folderPairId, false, message)
+                return@withContext SyncResult(folderPairId, System.currentTimeMillis(), System.currentTimeMillis(), false,
+                    errorCount = 1, errorMessages = listOf(message))
+            }
+
+            if (
+                folderPair.remoteFolderId != resolvedRemoteFolder.id ||
+                folderPair.remoteFolderPath != resolvedRemoteFolder.path
+            ) {
+                try {
+                    database.folderPairDao().updateRemoteFolder(
+                        id = folderPairId,
+                        remoteFolderId = resolvedRemoteFolder.id,
+                        remoteFolderPath = resolvedRemoteFolder.path
+                    )
+                } catch (e: Exception) {
+                    if (e is kotlinx.coroutines.CancellationException) throw e
+                    val errorMsg = "Failed to persist resolved remote folder: ${e.message}"
+                    logSyncResult(folderPairId, false, errorMsg)
+                    return@withContext SyncResult(
+                        folderPairId = folderPairId,
+                        startTimeMillis = System.currentTimeMillis(),
+                        endTimeMillis = System.currentTimeMillis(),
+                        isSuccess = false,
+                        errorCount = 1,
+                        errorMessages = listOf(errorMsg)
+                    )
+                }
+            }
+
+            // 3. Fetch only items beneath the resolved folder ID.
+            val remoteListResult = cloudProvider.listFolder(resolvedRemoteFolder.id, recursive = true)
             if (remoteListResult.isFailure) {
                 val exception = remoteListResult.exceptionOrNull()
-                val errorMsg = "Failed to list remote folder '${folderPair.remoteFolderId}': ${exception?.message}"
+                val errorMsg = "Failed to list remote folder '${resolvedRemoteFolder.id}': ${exception?.message}"
                 logSyncResult(folderPairId, false, errorMsg)
+                if (exception is kotlinx.coroutines.CancellationException) throw exception
                 if (exception is IOException) {
                     throw exception // Propagate network error for worker retry
                 }
@@ -131,13 +211,13 @@ class SyncCoordinator(
                     errorMessages = listOf(errorMsg)
                 )
             }
-            val remoteItems = mapRemoteItems(remoteListResult.getOrThrow(), folderPair.remoteFolderPath, pathFilter)
+            val remoteItems = mapRemoteItems(remoteListResult.getOrThrow(), pairFilter)
 
-            // 3. Load baseline snapshots
+            // 4. Load baseline snapshots
             val baselineEntities = database.syncBaselineDao().getAllForFolderPair(folderPairId)
             val baselineItems = mapBaselineItems(baselineEntities)
 
-            // 4. Plan reconciliation actions
+            // 5. Plan reconciliation actions
             val activeConflicts = database.syncConflictDao().getActiveConflicts(folderPairId)
             val activeConflictPaths = activeConflicts.flatMap { conflict ->
                 val branchRel = try {
@@ -151,7 +231,7 @@ class SyncCoordinator(
             val plannedActions = ReconciliationPlanner.plan(
                 folderPairId = folderPairId,
                 localRoot = localRoot,
-                remoteFolderId = folderPair.remoteFolderId,
+                remoteFolderId = resolvedRemoteFolder.id,
                 localItems = localItems,
                 remoteItems = remoteItems,
                 baselineItems = baselineItems,
@@ -166,16 +246,16 @@ class SyncCoordinator(
                 plannedActions.size
             )
 
-            // 5. Execute planned actions
+            // 6. Execute planned actions
             val pipeline = SyncExecutionPipeline(database, cloudProvider)
-            val result = pipeline.execute(
+            val result = pipeline.executeLocked(
                 folderPairId = folderPairId,
                 localRoot = localRoot,
-                remoteFolderId = folderPair.remoteFolderId,
+                remoteFolderId = resolvedRemoteFolder.id,
                 plannedActions = plannedActions
             )
 
-            // 6. Record audit log
+            // 7. Record audit log
             val logMessage = buildString {
                 append("Sync finished: ")
                 append("${result.uploadedCount} uploaded, ")
@@ -192,7 +272,7 @@ class SyncCoordinator(
                 details = if (result.errorMessages.isNotEmpty()) result.errorMessages.joinToString("\n") else null
             )
 
-            // 7. Trigger conflict alert notification if conflicts occurred
+            // 8. Trigger conflict alert notification if conflicts occurred
             if (result.conflictCount > 0 && context != null) {
                 SyncNotificationManager.showConflictAlert(
                     context = context,
@@ -204,7 +284,7 @@ class SyncCoordinator(
 
             result
         }
-    }
+    } }
 
     /**
      * Executes synchronization passes across all enabled folder pairs.
@@ -234,6 +314,7 @@ class SyncCoordinator(
         details: String? = null
     ) {
         try {
+            if (!isSuccess) database.folderPairDao().updateLastSync(folderPairId, System.currentTimeMillis(), io.relayfs.android.core.model.SyncStatus.ERROR)
             database.syncLogDao().insert(
                 SyncLogEntity(
                     folderPairId = folderPairId,
@@ -242,19 +323,107 @@ class SyncCoordinator(
                     details = details
                 )
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
             // Logging failure should not crash sync execution
         }
     }
 
-    companion object {
-        private val pairMutexes = ConcurrentHashMap<String, Mutex>()
-
-        private fun mutexFor(folderPairId: String): Mutex {
-            val newMutex = Mutex()
-            return pairMutexes.putIfAbsent(folderPairId, newMutex) ?: newMutex
+    private suspend fun resolveRemoteFolderPath(
+        cloudProvider: CloudProvider,
+        configuredPath: String,
+        allowCreate: Boolean = true
+    ): ResolvedRemoteFolder {
+        val normalizedPath = normalizeRemoteFolderPath(configuredPath)
+        val segments = normalizedPath.removePrefix("/").split('/').filter { it.isNotEmpty() }
+        if (segments.isEmpty()) {
+            return ResolvedRemoteFolder(ROOT_FOLDER_ID, "/")
         }
 
+        var parentFolderId = ROOT_FOLDER_ID
+        var resolvedPath = ""
+
+        for (segment in segments) {
+            resolvedPath += "/$segment"
+            val children = cloudProvider.listFolder(parentFolderId, recursive = false)
+                .getOrElse { cause ->
+                    throw IOException("Could not list remote folder '$resolvedPath'", cause)
+                }
+            val existing = children.firstOrNull { item ->
+                item.isDirectory && item.name == segment
+            }
+
+            if (existing != null) {
+                parentFolderId = existing.id
+                continue
+            }
+
+            if (!allowCreate) throw IOException("Established cloud folder is missing; refusing to recreate it")
+            val created = cloudProvider.createFolder(parentFolderId, segment)
+            if (created.isSuccess) {
+                parentFolderId = created.getOrThrow().id
+                continue
+            }
+
+            // Another client may have created the same folder between our list and create calls.
+            val refreshed = cloudProvider.listFolder(parentFolderId, recursive = false)
+                .getOrElse { cause ->
+                    throw IOException("Could not verify remote folder '$resolvedPath'", cause)
+                }
+            val concurrentlyCreated = refreshed.firstOrNull { item ->
+                item.isDirectory && item.name == segment
+            }
+            if (concurrentlyCreated != null) {
+                parentFolderId = concurrentlyCreated.id
+            } else {
+                throw IOException(
+                    "Could not create remote folder '$resolvedPath'",
+                    created.exceptionOrNull()
+                )
+            }
+        }
+
+        return ResolvedRemoteFolder(parentFolderId, normalizedPath)
+    }
+
+    private suspend fun requireDisjointRemoteRoots(provider: CloudProvider, root: String, others: List<String>) {
+        if (others.isEmpty()) return
+        val cache = mutableMapOf<String, Set<String>>()
+        suspend fun ancestors(id: String): Set<String> {
+            cache[id]?.let { return it }
+            val chain = mutableSetOf<String>()
+            var current = id
+            while (current != "d0" && current != "0") {
+                if (chain.size >= 256 || !chain.add(current)) throw IOException("Invalid cloud folder ancestry")
+                val metadata = provider.getItemMetadata(current).getOrThrow()
+                if (!metadata.isDirectory || metadata.id != current) throw IOException("Cloud folder is unavailable")
+                current = metadata.parentId ?: throw IOException("Cloud folder ancestry is incomplete")
+            }
+            return chain.toSet().also { cache[id] = it }
+        }
+        val currentAncestors = ancestors(root)
+        for (other in others.distinct()) {
+            if (other in currentAncestors || root in ancestors(other)) {
+                throw IOException("Overlapping cloud folder IDs must be separated before syncing")
+            }
+        }
+    }
+
+    private fun normalizeRemoteFolderPath(path: String): String {
+        val segments = path.trim().replace('\\', '/').split('/').filter { it.isNotEmpty() }
+        require(segments.none { it.isBlank() || it == "." || it == ".." }) {
+            "Remote folder path contains an invalid segment"
+        }
+        return if (segments.isEmpty()) "/" else "/${segments.joinToString("/")}"
+    }
+
+    private data class ResolvedRemoteFolder(
+        val id: String,
+        val path: String
+    )
+
+    companion object {
+        private const val ROOT_FOLDER_ID = "d0"
         /**
          * Recursively scans the local directory, filtering out excluded patterns,
          * and returns a map of canonical relative paths to [LocalItemSnapshot].
@@ -264,29 +433,25 @@ class SyncCoordinator(
         }
 
         /**
-         * Transforms remote [CloudItem] list into a relative-path map of [RemoteItemSnapshot].
+         * Transforms a provider-scoped remote listing into a relative-path map.
+         * [CloudProvider.listFolder] must return item paths relative to the requested folder.
          */
         fun mapRemoteItems(
             items: List<CloudItem>,
-            remoteRootPath: String,
             pathFilter: PathFilter
         ): Map<String, RemoteItemSnapshot> {
-            val cleanRoot = remoteRootPath.trim().trim('/').replace('\\', '/')
             val result = mutableMapOf<String, RemoteItemSnapshot>()
 
             for (item in items) {
                 // Skip remote directories as synchronization reconciles file contents
                 if (item.isDirectory) continue
 
-                val normalizedItemPath = item.path.trim().trimStart('/').replace('\\', '/')
-                val relPath = when {
-                    cleanRoot.isEmpty() -> normalizedItemPath
-                    normalizedItemPath.startsWith("$cleanRoot/") -> normalizedItemPath.removePrefix("$cleanRoot/")
-                    normalizedItemPath == cleanRoot -> ""
-                    else -> normalizedItemPath
-                }
+                val relPath = item.path.replace('\\', '/').trimStart('/')
+                val segments = relPath.split('/')
 
-                if (relPath.isBlank() || pathFilter.shouldExclude(relPath)) continue
+                require(relPath.isNotBlank() && segments.none { it.isBlank() || it == "." || it == ".." } && item.sizeBytes >= 0 && '\u0000' !in relPath) { "Invalid cloud path; refusing partial snapshot" }
+                if (pathFilter.shouldExclude(relPath)) continue
+                require(relPath !in result) { "Ambiguous cloud paths; refusing partial snapshot" }
 
                 result[relPath] = RemoteItemSnapshot(
                     relativePath = relPath,
@@ -313,7 +478,8 @@ class SyncCoordinator(
                     localSizeBytes = entity.localSizeBytes,
                     remoteSizeBytes = entity.remoteSizeBytes,
                     contentHash = entity.contentHash,
-                    isDirectory = entity.isDirectory
+                    isDirectory = entity.isDirectory,
+                    remoteContentHash = entity.remoteContentHash
                 )
             }
         }

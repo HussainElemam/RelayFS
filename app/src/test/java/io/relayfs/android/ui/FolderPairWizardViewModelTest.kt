@@ -87,7 +87,7 @@ class FolderPairWizardViewModelTest {
         viewModel.nextStep()
         assertEquals(2, viewModel.uiState.value.currentStep)
 
-        viewModel.updateRemotePath("/Notes/WorkNotes", "d12345")
+        viewModel.updateRemotePath("/Notes/WorkNotes")
         viewModel.nextStep()
         assertEquals(3, viewModel.uiState.value.currentStep)
 
@@ -104,6 +104,7 @@ class FolderPairWizardViewModelTest {
         assertEquals("Work Notes Vault", savedPair.name)
         assertEquals(vaultDir.absolutePath, savedPair.localPath)
         assertEquals("/Notes/WorkNotes", savedPair.remoteFolderPath)
+        assertEquals("d0", savedPair.remoteFolderId)
         assertTrue(savedPair.isObsidianVault)
         assertTrue(savedPair.wifiOnly)
     }
@@ -121,4 +122,28 @@ class FolderPairWizardViewModelTest {
         viewModel.savePair().join()
         assertEquals(0, database.folderPairDao().getEnabledPairs().size)
     }
+    @Test fun rootAndTraversalDestinationsAreRejected() = runTest {
+        val dir = tempFolder.newFolder("valid")
+        for (path in listOf("/", "", "/Vault/../Other", "/Vault/./Other")) {
+            val vm = FolderPairWizardViewModel(database, syncScheduler)
+            vm.updateLocalPath(dir.path); vm.updateRemotePath(path); vm.savePair().join()
+            assertTrue(vm.uiState.value.errorMessage != null)
+            assertTrue(database.folderPairDao().getEnabledPairs().isEmpty())
+        }
+    }
+
+    @Test fun overlappingLocalOrRemoteFoldersAndRepeatedSaveAreRejected() = runTest {
+        val dir = tempFolder.newFolder("parent")
+        viewModel.updateLocalPath(dir.path); viewModel.updateRemotePath("/Vault")
+        val first = viewModel.savePair(); val repeat = viewModel.savePair()
+        first.join(); repeat.join()
+        assertEquals(1, database.folderPairDao().getEnabledPairs().size)
+        for ((local, remote) in listOf(File(dir, "child").apply { mkdirs() } to "/Other", tempFolder.newFolder("separate") to "/Vault/Child")) {
+            val vm = FolderPairWizardViewModel(database, syncScheduler)
+            vm.updateLocalPath(local.path); vm.updateRemotePath(remote); vm.savePair().join()
+            assertTrue(vm.uiState.value.errorMessage?.contains("overlaps") == true)
+        }
+        assertEquals(1, database.folderPairDao().getEnabledPairs().size)
+    }
+
 }

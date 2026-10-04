@@ -83,6 +83,8 @@ class CloudDocumentsProviderTest {
 
     @After
     fun tearDown() {
+        provider.shutdown()
+        io.relayfs.android.core.saf.PendingEdits.openDescriptors.clear()
         CloudDocumentsProvider.customDatabase = null
         CloudDocumentsProvider.customTokenStorage = null
         CloudDocumentsProvider.customCloudProviderFactory = null
@@ -246,10 +248,10 @@ class CloudDocumentsProviderTest {
     @Test
     fun testOpenDocument_ReadOnlySeekable() = runTest {
         val testContent = "Seekable read-only cloud stream content"
-        fakeCloudProvider.fileContents["f_seekable"] = testContent
+        fakeCloudProvider.fileContents["f101"] = testContent
 
         val entity = SafMetadataEntity(
-            documentId = "f_seekable",
+            documentId = "f101",
             parentDocumentId = "d0",
             accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
             displayName = "test.txt",
@@ -259,10 +261,10 @@ class CloudDocumentsProviderTest {
         )
         database.safMetadataDao().insertOrUpdate(entity)
 
-        val pfd = provider.openDocument("f_seekable", "r", null)
+        val pfd = provider.openDocument("f101", "r", null)
         assertNotNull(pfd)
 
-        val cachedFile = File(File(cacheDir, "read"), "f_seekable")
+        val cachedFile = File(File(cacheDir, "read"), "f101")
         assertTrue(cachedFile.exists())
         assertEquals(testContent, cachedFile.readText())
         pfd.close()
@@ -270,9 +272,9 @@ class CloudDocumentsProviderTest {
 
     @Test
     fun testOpenDocument_ReadOnlyZeroByteFileUsesCacheAfterFirstDownload() = runTest {
-        fakeCloudProvider.fileContents["f_empty"] = ""
+        fakeCloudProvider.fileContents["f102"] = ""
         val entity = SafMetadataEntity(
-            documentId = "f_empty",
+            documentId = "f102",
             parentDocumentId = "d0",
             accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
             displayName = "empty.md",
@@ -282,17 +284,18 @@ class CloudDocumentsProviderTest {
         )
         database.safMetadataDao().insertOrUpdate(entity)
 
-        provider.openDocument("f_empty", "r", null).close()
-        provider.openDocument("f_empty", "r", null).close()
+        provider.openDocument("f102", "r", null).close()
+        provider.openDocument("f102", "r", null).close()
 
         assertEquals(1, fakeCloudProvider.downloadCount)
-        assertTrue(File(File(cacheDir, "read"), "f_empty").exists())
+        assertTrue(File(File(cacheDir, "read"), "f102").exists())
     }
 
     @Test
     fun testOpenDocument_WriteModeStaging() = runTest {
+        fakeCloudProvider.fileContents["f103"] = ""
         val entity = SafMetadataEntity(
-            documentId = "f_write",
+            documentId = "f103",
             parentDocumentId = "d0",
             accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
             displayName = "edit.txt",
@@ -302,25 +305,17 @@ class CloudDocumentsProviderTest {
         )
         database.safMetadataDao().insertOrUpdate(entity)
 
-        val pfd = provider.openDocument("f_write", "w", null)
+        val pfd = provider.openDocument("f103", "w", null)
         assertNotNull(pfd)
 
         FileOutputStream(pfd.fileDescriptor).use { output ->
             output.write("Edited via third-party application".toByteArray())
         }
 
-        // Test handler document closed directly
-        val stagingDir = File(cacheDir, "staging")
-        val stagingFiles = stagingDir.listFiles() ?: emptyArray()
-        assertTrue(stagingFiles.isNotEmpty())
-        val stagingFile = stagingFiles[0]
-
-        provider.handleDocumentClosed(context, "f_write", stagingFile, entity)
-
-        val readDir = File(cacheDir, "read")
-        val cachedFile = File(readDir, "f_write")
-        assertTrue(cachedFile.exists())
-        assertEquals("Edited via third-party application", cachedFile.readText())
+        val edit = database.pendingUploadDao().getAll().single()
+        assertTrue(File(edit.localPath).exists())
+        assertFalse(File(edit.localPath).canonicalPath.startsWith(cacheDir.canonicalPath))
+        assertEquals("Edited via third-party application", File(edit.localPath).readText())
 
         pfd.close()
     }
@@ -329,10 +324,10 @@ class CloudDocumentsProviderTest {
     fun testOpenDocument_WriteMode_ExistingFileWithContent_DownloadsBeforeEdit() = runTest {
         fakeTokenStorage.saveToken(AccountsViewModel.DEFAULT_ACCOUNT_ID, "token")
         val initialContent = "Original remote content for editing"
-        fakeCloudProvider.fileContents["f_existing_edit"] = initialContent
+        fakeCloudProvider.fileContents["f104"] = initialContent
 
         val entity = SafMetadataEntity(
-            documentId = "f_existing_edit",
+            documentId = "f104",
             parentDocumentId = "d0",
             accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
             displayName = "existing_edit.txt",
@@ -342,14 +337,11 @@ class CloudDocumentsProviderTest {
         )
         database.safMetadataDao().insertOrUpdate(entity)
 
-        val pfd = provider.openDocument("f_existing_edit", "rw", null)
+        val pfd = provider.openDocument("f104", "rw", null)
         assertNotNull(pfd)
 
-        val stagingDir = File(cacheDir, "staging")
-        val stagingFiles = stagingDir.listFiles() ?: emptyArray()
-        assertTrue(stagingFiles.isNotEmpty())
-        val stagingFile = stagingFiles.first { it.name.startsWith("f_existing_edit") }
-        assertEquals(initialContent, stagingFile.readText())
+        val edit = database.pendingUploadDao().getAll().single()
+        assertEquals(initialContent, File(edit.localPath).readText())
 
         pfd.close()
     }
@@ -358,7 +350,7 @@ class CloudDocumentsProviderTest {
     fun testOpenDocument_WriteMode_DownloadFailureDoesNotCreateEmptyStagingFile() = runTest {
         fakeCloudProvider.downloadFailure = IOException("network unavailable")
         val entity = SafMetadataEntity(
-            documentId = "f_failed_edit",
+            documentId = "f105",
             parentDocumentId = "d0",
             accountId = AccountsViewModel.DEFAULT_ACCOUNT_ID,
             displayName = "important.txt",
@@ -370,15 +362,15 @@ class CloudDocumentsProviderTest {
 
         var exceptionThrown = false
         try {
-            provider.openDocument("f_failed_edit", "rw", null)
-        } catch (_: FileNotFoundException) {
+            provider.openDocument("f105", "rw", null)
+        } catch (_: IOException) {
             exceptionThrown = true
         }
 
         assertTrue(exceptionThrown)
         val stagingFiles = File(cacheDir, "staging").listFiles().orEmpty()
-        assertTrue(stagingFiles.none { it.name.startsWith("f_failed_edit") })
-        assertFalse(File(File(cacheDir, "read"), "f_failed_edit").exists())
+        assertTrue(stagingFiles.none { it.name.startsWith("f105") })
+        assertFalse(File(File(cacheDir, "read"), "f105").exists())
     }
 
     @Test
@@ -476,6 +468,34 @@ class CloudDocumentsProviderTest {
         assertFalse(provider.isChildDocument("d2", "f1"))
     }
 
+
+    @Test fun removedFolderRefreshRemovesNestedGhostDocuments() = runTest {
+        database.safMetadataDao().insertOrUpdate(listOf(
+            SafMetadataEntity("d100", "d0", "pcloud_default", "removed", "dir", isDirectory = true),
+            SafMetadataEntity("f101", "d100", "pcloud_default", "ghost.md", "text/plain")))
+        provider.refreshRemoteFolder("d0", "${context.packageName}.documents")
+        assertNull(database.safMetadataDao().getById("d100")); assertNull(database.safMetadataDao().getById("f101"))
+        assertFalse(provider.isChildDocument("d0", "missing"))
+    }
+
+    @Test fun backgroundListingFailureReportsErrorAndRetainsCache() = runTest {
+        val old = SafMetadataEntity("f1", "d0", "pcloud_default", "keep.md", "text/plain")
+        database.safMetadataDao().insertOrUpdate(old)
+        fakeCloudProvider.listFailure = IOException("network unavailable")
+        provider.queryChildDocuments("d0", null, null as String?).close()
+        // Drain the real IO refresh without relying on the test scheduler's virtual time.
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Thread.sleep(100) }
+        val cursor = provider.queryChildDocuments("d0", null, null as String?)
+        assertNotNull(cursor.extras.getString(DocumentsContract.EXTRA_ERROR)); cursor.close()
+        assertNotNull(database.safMetadataDao().getById("f1"))
+    }
+
+    @Test fun rootDeletionAndRenameAreRejectedWithoutContactingCloud() {
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { provider.deleteDocument("d0") }
+        org.junit.Assert.assertThrows(IllegalArgumentException::class.java) { provider.renameDocument("d0", "new") }
+        assertTrue(fakeCloudProvider.deletedIds.isEmpty())
+    }
+
     private class FakeTokenStorage : TokenStorage {
         private val tokens = mutableMapOf<String, String>()
         override suspend fun saveToken(accountId: String, token: String) { tokens[accountId] = token }
@@ -490,6 +510,7 @@ class CloudDocumentsProviderTest {
 
         var itemsToReturn: List<CloudItem> = emptyList()
         var downloadFailure: Exception? = null
+        var listFailure: Exception? = null
         var downloadCount: Int = 0
         val fileContents = mutableMapOf<String, String>()
         val deletedIds = mutableListOf<String>()
@@ -499,10 +520,12 @@ class CloudDocumentsProviderTest {
         )
 
         override suspend fun listFolder(remoteFolderId: String, recursive: Boolean): Result<List<CloudItem>> =
-            Result.success(itemsToReturn)
+            listFailure?.let { Result.failure(it) } ?: Result.success(itemsToReturn)
 
         override suspend fun getItemMetadata(remoteId: String): Result<CloudItem> =
-            Result.failure(UnsupportedOperationException())
+            Result.success(CloudItem(remoteId, "d0", "test.txt", "/test.txt", false, (fileContents[remoteId] ?: "").length.toLong(), 1000L))
+        override suspend fun preserveFile(remoteId: String) = Result.success(Unit)
+        override suspend fun uploadNewFile(parentFolderId: String, file: File, remoteName: String) = uploadFile(parentFolderId, file, remoteName, null)
 
         override fun supportsDeltaSync(): Boolean = false
 

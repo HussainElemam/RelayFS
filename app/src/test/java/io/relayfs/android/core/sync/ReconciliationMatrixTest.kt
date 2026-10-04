@@ -27,7 +27,7 @@ class ReconciliationMatrixTest {
 
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 100L, 1000L, "hash1"))
         val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 100L, 1000L, "hash1"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -43,7 +43,7 @@ class ReconciliationMatrixTest {
 
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 150L, 2000L, "hash2"))
         val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 100L, 1000L, "hash1"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -61,7 +61,7 @@ class ReconciliationMatrixTest {
 
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 100L, 1000L, "hash1"))
         val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 250L, 3000L, "hash3"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -111,7 +111,7 @@ class ReconciliationMatrixTest {
 
         val local = emptyMap<String, LocalItemSnapshot>()
         val remote = mapOf(path to RemoteItemSnapshot(path, "f10", 100L, 1000L, "hash1"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f10", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f10", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -128,7 +128,7 @@ class ReconciliationMatrixTest {
 
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 100L, 1000L, "hash1"))
         val remote = emptyMap<String, RemoteItemSnapshot>()
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f10", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f10", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -145,8 +145,8 @@ class ReconciliationMatrixTest {
 
         // Same content hash "identical_hash" but different timestamps
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 200L, 2000L, "identical_hash"))
-        val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 200L, 2100L, "identical_hash"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "old_hash"))
+        val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 200L, 2100L, "xxh64:identical_hash"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "old_hash", remoteContentHash = "old_hash"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -162,7 +162,7 @@ class ReconciliationMatrixTest {
 
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 300L, 2000L, "hash_local_edit"))
         val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 350L, 2500L, "hash_remote_edit"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_baseline"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_baseline", remoteContentHash = "hash_baseline"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -182,7 +182,7 @@ class ReconciliationMatrixTest {
 
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 150L, 2000L, "hash_edited"))
         val remote = emptyMap<String, RemoteItemSnapshot>() // Deleted on remote
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_base"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_base", remoteContentHash = "hash_base"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -197,7 +197,7 @@ class ReconciliationMatrixTest {
 
         val local = emptyMap<String, LocalItemSnapshot>() // Deleted locally
         val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 400L, 3000L, "hash_edited_cloud"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_base"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_base", remoteContentHash = "hash_base"))
 
         val actions = ReconciliationPlanner.plan(folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline)
 
@@ -213,7 +213,7 @@ class ReconciliationMatrixTest {
 
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 100L, 1000L, "hash1"))
         val remote = emptyMap<String, RemoteItemSnapshot>() // Deleted in cloud
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(
             folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
@@ -232,7 +232,7 @@ class ReconciliationMatrixTest {
 
         val local = emptyMap<String, LocalItemSnapshot>() // Deleted locally
         val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 100L, 1000L, "hash1"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(
             folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
@@ -250,7 +250,7 @@ class ReconciliationMatrixTest {
 
         val local = emptyMap<String, LocalItemSnapshot>() // Deleted locally
         val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 200L, 1500L, "hash_rem"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(
             folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
@@ -270,7 +270,7 @@ class ReconciliationMatrixTest {
 
         val local = mapOf(path to LocalItemSnapshot(path, localFile, 150L, 2000L, "hash_local"))
         val remote = mapOf(path to RemoteItemSnapshot(path, "f1", 250L, 3000L, "hash_remote"))
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_orig"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash_orig", remoteContentHash = "hash_orig"))
 
         val actions = ReconciliationPlanner.plan(
             folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
@@ -288,7 +288,7 @@ class ReconciliationMatrixTest {
 
         val local = emptyMap<String, LocalItemSnapshot>()
         val remote = emptyMap<String, RemoteItemSnapshot>()
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(
             folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline
@@ -305,7 +305,7 @@ class ReconciliationMatrixTest {
 
         val local = emptyMap<String, LocalItemSnapshot>()
         val remote = emptyMap<String, RemoteItemSnapshot>()
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(
             folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,
@@ -323,7 +323,7 @@ class ReconciliationMatrixTest {
 
         val local = emptyMap<String, LocalItemSnapshot>()
         val remote = emptyMap<String, RemoteItemSnapshot>()
-        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1"))
+        val baseline = mapOf(path to BaselineItemSnapshot(path, "f1", 1000L, 1000L, 100L, 100L, "hash1", remoteContentHash = "hash1"))
 
         val actions = ReconciliationPlanner.plan(
             folderPairId, tempFolder.root, remoteFolderId, local, remote, baseline,

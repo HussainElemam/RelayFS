@@ -1,13 +1,22 @@
 package io.relayfs.android.core.provider.pcloud.api
 
+import io.relayfs.android.core.sync.engine.cancellableResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
+import kotlin.coroutines.resumeWithException
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.Retrofit
@@ -26,17 +35,24 @@ class PCloudApiClient(
 
     val json = Json {
         ignoreUnknownKeys = true
-        isLenient = true
-        coerceInputValues = true
+        isLenient = false
+        coerceInputValues = false
     }
 
     val okHttpClient: OkHttpClient = customOkHttpClient ?: OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .writeTimeout(60, TimeUnit.SECONDS)
+        .followSslRedirects(false)
         .addInterceptor(AuthInterceptor(tokenProvider))
         .addInterceptor(RateLimitInterceptor())
         .build()
+
+    val downloadClient: OkHttpClient = okHttpClient.newBuilder().apply {
+        interceptors().removeAll { it is AuthInterceptor }
+        networkInterceptors().clear()
+        followSslRedirects(false)
+    }.build()
 
     private val contentType = "application/json".toMediaType()
 
@@ -55,11 +71,17 @@ class PCloudApiClient(
         folderId: Long,
         file: File,
         remoteName: String,
+        renameIfExists: Boolean = false,
         progress: ((bytesWritten: Long, totalBytes: Long) -> Unit)? = null
     ): Result<PCloudItemMetadata> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val totalBytes = file.length()
-            val url = "${baseUrl.trimEnd('/')}/uploadfile?folderid=$folderId&filename=${java.net.URLEncoder.encode(remoteName, "UTF-8")}"
+            val url = "${baseUrl.trimEnd('/')}/uploadfile".toHttpUrl().newBuilder()
+                .addQueryParameter("folderid", folderId.toString())
+                .addQueryParameter("filename", remoteName)
+                .addQueryParameter("nopartial", "1")
+                .addQueryParameter("renameifexists", if (renameIfExists) "1" else "0")
+                .build()
 
             val requestBody = file.asRequestBody("application/octet-stream".toMediaTypeOrNull())
             val countingBody = ProgressRequestBody(requestBody) { bytesWritten ->
@@ -71,7 +93,7 @@ class PCloudApiClient(
                 .post(countingBody)
                 .build()
 
-            okHttpClient.newCall(request).execute().use { response ->
+            executeCancellable(okHttpClient.newCall(request)) { response ->
                 if (!response.isSuccessful) {
                     throw IOException("Single-part upload failed with HTTP ${response.code}: ${response.message}")
                 }
@@ -99,7 +121,7 @@ class PCloudApiClient(
         chunkSize: Int = DEFAULT_CHUNK_SIZE,
         progress: ((bytesWritten: Long, totalBytes: Long) -> Unit)? = null
     ): Result<PCloudItemMetadata> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
             val totalBytes = file.length()
 
             // 1. Initialize upload session
@@ -109,6 +131,7 @@ class PCloudApiClient(
                 throw IOException("upload_create failed: ${createBody?.error ?: createResponse.message()}")
             }
             val uploadId = createBody.uploadid
+            require(uploadId > 0) { "Missing upload session identity" }
 
             // 2. Upload chunks sequentially
             FileInputStream(file).use { inputStream ->
@@ -117,6 +140,7 @@ class PCloudApiClient(
                 var bytesRead: Int
 
                 while (inputStream.read(buffer).also { bytesRead = it } != -1) {
+                    currentCoroutineContext().ensureActive()
                     val chunkData = if (bytesRead == chunkSize) buffer else buffer.copyOf(bytesRead)
                     val chunkBody = chunkData.toRequestBody("application/octet-stream".toMediaTypeOrNull())
 
@@ -126,7 +150,7 @@ class PCloudApiClient(
                         .post(chunkBody)
                         .build()
 
-                    okHttpClient.newCall(writeRequest).execute().use { writeResponse ->
+                    executeCancellable(okHttpClient.newCall(writeRequest)) { writeResponse ->
                         if (!writeResponse.isSuccessful) {
                             throw IOException("upload_write at offset $offset failed with HTTP ${writeResponse.code}")
                         }
@@ -143,6 +167,7 @@ class PCloudApiClient(
                 }
             }
 
+            currentCoroutineContext().ensureActive()
             // 3. Save uploaded file into target folder
             val saveResponse = apiService.uploadSave(
                 uploadId = uploadId,
@@ -167,13 +192,15 @@ class PCloudApiClient(
         destinationFile: File,
         progress: ((bytesRead: Long, totalBytes: Long) -> Unit)? = null
     ): Result<Unit> = withContext(Dispatchers.IO) {
-        runCatching {
+        cancellableResult {
+            val url = downloadUrl.toHttpUrl()
+            require(url.isHttps || (baseUrl.toHttpUrl().host in setOf("localhost", "127.0.0.1", "::1") && !baseUrl.toHttpUrl().isHttps && url.host == baseUrl.toHttpUrl().host)) { "Insecure download link rejected" }
             val request = Request.Builder()
-                .url(downloadUrl)
+                .url(url)
                 .get()
                 .build()
 
-            okHttpClient.newCall(request).execute().use { response ->
+            executeCancellable(downloadClient.newCall(request)) { response ->
                 if (!response.isSuccessful) {
                     throw IOException("Download failed with HTTP ${response.code}: ${response.message}")
                 }
@@ -194,6 +221,28 @@ class PCloudApiClient(
             }
             Unit
         }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private suspend fun <T> executeCancellable(call: okhttp3.Call, block: suspend (okhttp3.Response) -> T): T = coroutineScope {
+        // Keep cancellation attached while response bodies are being streamed, not only until headers arrive.
+        val guard = launch(kotlinx.coroutines.Dispatchers.Unconfined) {
+            try { awaitCancellation() } finally { call.cancel() }
+        }
+        try {
+            val response = suspendCancellableCoroutine<okhttp3.Response> { continuation ->
+                continuation.invokeOnCancellation { call.cancel() }
+                call.enqueue(object : okhttp3.Callback {
+                    override fun onFailure(call: okhttp3.Call, e: IOException) {
+                        if (!continuation.isCancelled) continuation.resumeWithException(e)
+                    }
+                    override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                        continuation.resume(response) { response.close() }
+                    }
+                })
+            }
+            response.use { block(it) }
+        } finally { guard.cancel() }
     }
 
     companion object {

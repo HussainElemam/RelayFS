@@ -11,6 +11,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -92,6 +97,11 @@ fun RelayFSApp(
                 )
                 val uiState by dashboardViewModel.uiState.collectAsState()
 
+                var exportingId by remember { mutableStateOf<String?>(null) }
+                val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+                    if (uri != null) exportingId?.let { dashboardViewModel.exportPending(it, uri) }
+                    exportingId = null
+                }
                 DashboardScreen(
                     uiState = uiState,
                     onSyncNow = { pairId -> dashboardViewModel.triggerSyncNow(pairId) },
@@ -102,13 +112,16 @@ fun RelayFSApp(
                         val intent = PowerManagementHelper.createBatteryOptimizationSettingsIntent()
                         context.startActivity(intent)
                     },
-                    onDismissBatteryBanner = { dashboardViewModel.dismissBatteryBanner() }
+                    onDismissBatteryBanner = { dashboardViewModel.dismissBatteryBanner() },
+                    onRetryPending = { dashboardViewModel.retryPending(it) },
+                    onExportPending = { id, name -> exportingId = id; exportLauncher.launch(name) },
+                    onDiscardPending = { dashboardViewModel.discardPending(it) }
                 )
             }
 
             composable(Screen.Accounts.route) {
                 val accountsViewModel: AccountsViewModel = viewModel(
-                    factory = AccountsViewModel.Factory(tokenStorage)
+                    factory = AccountsViewModel.Factory(tokenStorage, io.relayfs.android.core.security.AccountSessionManager(context, database, tokenStorage))
                 )
                 val uiState by accountsViewModel.uiState.collectAsState()
 
@@ -131,7 +144,7 @@ fun RelayFSApp(
                     uiState = uiState,
                     onNameChanged = { wizardViewModel.updateName(it) },
                     onLocalPathChanged = { wizardViewModel.updateLocalPath(it) },
-                    onRemotePathChanged = { path, id -> wizardViewModel.updateRemotePath(path, id) },
+                    onRemotePathChanged = { wizardViewModel.updateRemotePath(it) },
                     onDirectionChanged = { wizardViewModel.updateSyncDirection(it) },
                     onIntervalChanged = { wizardViewModel.updateSyncInterval(it) },
                     onWifiOnlyChanged = { wizardViewModel.updateWifiOnly(it) },

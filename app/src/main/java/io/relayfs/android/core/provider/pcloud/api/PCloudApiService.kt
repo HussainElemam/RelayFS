@@ -18,6 +18,17 @@ interface PCloudApiService {
         @Query("recursive") recursive: Int = 0
     ): Response<PCloudFolderResponse>
 
+    @GET("stat")
+    suspend fun stat(@Query("fileid") fileId: Long): Response<PCloudFolderResponse>
+
+    @POST("copyfile")
+    suspend fun copyFile(
+        @Query("fileid") fileId: Long,
+        @Query("tofolderid") folderId: Long,
+        @Query("toname") name: String,
+        @Query("noover") noOverwrite: Int = 1
+    ): Response<PCloudFolderResponse>
+
     @GET("diff")
     suspend fun getDiff(
         @Query("diffid") diffId: Long? = null,
@@ -61,8 +72,8 @@ interface PCloudApiService {
         @Query("fileid") fileId: Long
     ): Response<PCloudBaseResponse>
 
-    @POST("deletefolderrecursive")
-    suspend fun deleteFolderRecursive(
+    @POST("deletefolder")
+    suspend fun deleteFolder(
         @Query("folderid") folderId: Long
     ): Response<PCloudBaseResponse>
 

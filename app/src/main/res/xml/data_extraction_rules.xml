@@ -6,12 +6,12 @@
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="database" path="relayfs.db" />
-        <exclude domain="sharedpref" path="relayfs_secure_tokens.xml" />
+        <exclude domain="sharedpref" path="." />
         <exclude domain="sharedpref" path="pcloud_oauth_state.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="database" path="relayfs.db" />
-        <exclude domain="sharedpref" path="relayfs_secure_tokens.xml" />
+        <exclude domain="sharedpref" path="." />
         <exclude domain="sharedpref" path="pcloud_oauth_state.xml" />
     </device-transfer>
 </data-extraction-rules>

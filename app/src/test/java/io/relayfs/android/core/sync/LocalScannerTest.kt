@@ -56,4 +56,27 @@ class LocalScannerTest {
 
         assertTrue(failure is SyncException.LocalStorageUnavailable)
     }
+    @Test fun trackedSymlinkOutsideRootStopsTheEntireScan() {
+        val root = tempFolder.newFolder("root")
+        val outside = tempFolder.newFile("outside.md").apply { writeText("valuable") }
+        java.nio.file.Files.createSymbolicLink(File(root, "tracked.md").toPath(), outside.toPath())
+        val failure = runCatching { LocalScanner.scan(root, PathFilter()) }.exceptionOrNull()
+        assertTrue(failure is SyncException.LocalStorageUnavailable)
+        assertEquals("valuable", outside.readText())
+    }
+
+    @Test fun directoryAliasInsideRootStopsInsteadOfDroppingOnePath() {
+        val root = tempFolder.newFolder("root")
+        val directory = File(root, "notes").apply { mkdirs() }
+        File(directory, "note.md").writeText("valuable")
+        java.nio.file.Files.createSymbolicLink(File(root, "alias").toPath(), directory.toPath())
+        assertTrue(runCatching { LocalScanner.scan(root, PathFilter()) }.exceptionOrNull() is SyncException.LocalStorageUnavailable)
+    }
+
+    @Test fun excludedSymlinkDoesNotBlockAnOtherwiseCompleteSnapshot() {
+        val root = tempFolder.newFolder("root")
+        File(root, "note.md").writeText("valuable")
+        java.nio.file.Files.createSymbolicLink(File(root, ".git").toPath(), tempFolder.newFolder("git").toPath())
+        assertEquals(setOf("note.md"), LocalScanner.scan(root, PathFilter()).keys)
+    }
 }

@@ -41,6 +41,8 @@ class CloudProviderFactoryTest {
     private class FakeTokenStorage(initialTokens: Map<String, String>) : TokenStorage {
         private val tokens = initialTokens.toMutableMap()
 
+        override suspend fun getIdentity(accountId: String) = "https://api.pcloud.com#123"
+
         override suspend fun saveToken(accountId: String, token: String) {
             tokens[accountId] = token
         }

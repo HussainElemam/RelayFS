@@ -67,7 +67,7 @@ fun FolderPairWizardScreen(
     uiState: WizardUiState,
     onNameChanged: (String) -> Unit,
     onLocalPathChanged: (String) -> Unit,
-    onRemotePathChanged: (String, String) -> Unit,
+    onRemotePathChanged: (String) -> Unit,
     onDirectionChanged: (SyncDirection) -> Unit,
     onIntervalChanged: (Long) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit,
@@ -151,7 +151,6 @@ fun FolderPairWizardScreen(
                 )
                 2 -> StepTwoRemoteFolder(
                     remotePath = uiState.remoteFolderPath,
-                    remoteFolderId = uiState.remoteFolderId,
                     onPathChanged = onRemotePathChanged,
                     onBack = onBackClicked,
                     onNext = onNextClicked
@@ -390,8 +389,7 @@ fun StepOneLocalFolder(
 @Composable
 fun StepTwoRemoteFolder(
     remotePath: String,
-    remoteFolderId: String,
-    onPathChanged: (String, String) -> Unit,
+    onPathChanged: (String) -> Unit,
     onBack: () -> Unit,
     onNext: () -> Unit
 ) {
@@ -408,7 +406,7 @@ fun StepTwoRemoteFolder(
 
     OutlinedTextField(
         value = remotePath,
-        onValueChange = { onPathChanged(it, remoteFolderId) },
+        onValueChange = onPathChanged,
         label = { Text("Remote Folder Path") },
         placeholder = { Text("/Obsidian/MyVault") },
         leadingIcon = { Icon(Icons.Default.Cloud, contentDescription = null) },
@@ -416,15 +414,6 @@ fun StepTwoRemoteFolder(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("input_remote_path")
-    )
-
-    OutlinedTextField(
-        value = remoteFolderId,
-        onValueChange = { onPathChanged(remotePath, it) },
-        label = { Text("Remote Folder ID (Default root: d0)") },
-        placeholder = { Text("d0") },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth()
     )
 
     Spacer(modifier = Modifier.height(16.dp))
@@ -588,7 +577,7 @@ fun FolderPairWizardStep1Preview() {
             ),
             onNameChanged = {},
             onLocalPathChanged = {},
-            onRemotePathChanged = { _, _ -> },
+            onRemotePathChanged = {},
             onDirectionChanged = {},
             onIntervalChanged = {},
             onWifiOnlyChanged = {},

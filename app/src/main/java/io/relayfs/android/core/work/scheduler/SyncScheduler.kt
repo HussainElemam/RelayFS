@@ -16,15 +16,24 @@ import io.relayfs.android.core.database.entity.FolderPairEntity
 import io.relayfs.android.core.model.SyncPair
 import io.relayfs.android.core.work.SyncWorker
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.map
 
 /**
  * Scheduler for background synchronization tasks using AndroidX [WorkManager].
  * Manages periodic background sync and expedited immediate triggers.
  */
 class SyncScheduler(
-    private val context: Context,
+    context: Context,
     private val workManager: WorkManager = WorkManager.getInstance(context)
 ) {
+
+    fun observeActiveWork() = kotlinx.coroutines.flow.combine(
+        workManager.getWorkInfosByTagFlow(SyncWorker.TAG_SYNC),
+        workManager.getWorkInfosByTagFlow(io.relayfs.android.core.work.CloudUploadWorker.TAG_UPLOAD)
+    ) { sync, uploads ->
+        (sync + uploads).filter { it.state == WorkInfo.State.RUNNING ||
+            (it.state == WorkInfo.State.ENQUEUED && ("sync_immediate" in it.tags || io.relayfs.android.core.work.CloudUploadWorker.TAG_UPLOAD in it.tags)) }
+    }
 
     /**
      * Enqueues or updates unique periodic sync work for a folder pair.
@@ -93,6 +102,8 @@ class SyncScheduler(
      */
     fun triggerImmediateSync(folderPairId: String) {
         val oneTimeRequest = OneTimeWorkRequestBuilder<SyncWorker>()
+            .addTag("sync_immediate")
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setInputData(workDataOf(SyncWorker.KEY_FOLDER_PAIR_ID to folderPairId))
             .addTag(SyncWorker.TAG_SYNC)

@@ -26,6 +26,7 @@ data class SafMetadataEntity(
     val lastModified: Long = System.currentTimeMillis(),
     val isDirectory: Boolean = false,
     val flags: Int = 0,
-    val cachedAt: Long = System.currentTimeMillis()
+    val cachedAt: Long = System.currentTimeMillis(),
+    val contentHash: String? = null
 )
 

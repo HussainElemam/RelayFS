@@ -11,6 +11,7 @@ import io.relayfs.android.core.model.DeltaChanges
 import io.relayfs.android.core.model.ProviderType
 import io.relayfs.android.core.model.SyncStatus
 import io.relayfs.android.core.provider.CloudProvider
+import io.relayfs.android.core.sync.hash.FastHasher
 import io.relayfs.android.core.sync.engine.LocalItemSnapshot
 import io.relayfs.android.core.sync.engine.RemoteItemSnapshot
 import io.relayfs.android.core.sync.engine.SyncAction
@@ -76,7 +77,7 @@ class SyncExecutionPipelineTest {
 
         val action = SyncAction.Upload(
             relativePath = "note.md",
-            localItem = LocalItemSnapshot("note.md", localFile, localFile.length(), localFile.lastModified(), "hash_local"),
+            localItem = LocalItemSnapshot("note.md", localFile, localFile.length(), localFile.lastModified(), FastHasher.hashFile(localFile)),
             parentFolderId = "d0"
         )
 
@@ -100,10 +101,10 @@ class SyncExecutionPipelineTest {
         localFile.writeText("scanned content")
         val scannedSize = localFile.length()
         val scannedModified = localFile.lastModified()
-        val scannedHash = "scanned-hash"
+        val scannedHash = FastHasher.hashFile(localFile)
         fakeCloud.onUpload = { uploadedFile ->
-            uploadedFile.writeText("content changed while upload was in progress")
-            uploadedFile.setLastModified(scannedModified + 10_000L)
+            localFile.writeText("content changed while upload was in progress")
+            localFile.setLastModified(scannedModified + 10_000L)
         }
 
         val action = SyncAction.Upload(
@@ -198,8 +199,8 @@ class SyncExecutionPipelineTest {
         )
 
         val localFile = tempFolder.newFile("del_local.md")
-        val deleteLocalAction = SyncAction.DeleteLocal("del_local.md", localFile)
-        val deleteRemoteAction = SyncAction.DeleteRemote("del_remote.md", "f400", false)
+        val deleteLocalAction = SyncAction.DeleteLocal("del_local.md", localFile, io.relayfs.android.core.sync.engine.FileSafety.snapshot(localFile, "del_local.md"))
+        val deleteRemoteAction = SyncAction.DeleteRemote("del_remote.md", "f400", false, RemoteItemSnapshot("del_remote.md", "f400", 10L, 1000L, "hash_rem"))
 
         val result = pipeline.execute(
             folderPairId,
@@ -268,7 +269,7 @@ class SyncExecutionPipelineTest {
 
         val action = SyncAction.Upload(
             relativePath = "Personal/Work/note.md",
-            localItem = LocalItemSnapshot("Personal/Work/note.md", nestedFile, nestedFile.length(), nestedFile.lastModified(), "h"),
+            localItem = LocalItemSnapshot("Personal/Work/note.md", nestedFile, nestedFile.length(), nestedFile.lastModified(), FastHasher.hashFile(nestedFile)),
             parentFolderId = "d0"
         )
 
@@ -333,7 +334,10 @@ private class FakeCloudProvider : CloudProvider {
     override suspend fun listFolder(remoteFolderId: String, recursive: Boolean) =
         if (failFolderCreation) Result.failure(IllegalStateException("list failed"))
         else Result.success(emptyList<CloudItem>())
-    override suspend fun getItemMetadata(remoteId: String) = Result.failure<CloudItem>(UnsupportedOperationException())
+    override suspend fun getItemMetadata(remoteId: String) = Result.success(CloudItem(remoteId, "d0", "note.md", "/note.md", false,
+        filesToDownload[remoteId]?.length?.toLong() ?: 10L, if (remoteId == "f200") 2000L else 1000L, contentHash = if (remoteId == "f200") "hashR" else "hash_rem"))
+    override suspend fun preserveFile(remoteId: String) = Result.success(Unit)
+    override suspend fun uploadNewFile(parentFolderId: String, file: File, remoteName: String) = uploadFile(parentFolderId, file, remoteName, null)
     override fun supportsDeltaSync() = true
     override suspend fun getDeltaChanges(sinceToken: String?) = Result.success(DeltaChanges("1", emptyList(), false))
 
@@ -353,7 +357,7 @@ private class FakeCloudProvider : CloudProvider {
         remoteName: String,
         progress: ((Long, Long) -> Unit)?
     ): Result<CloudItem> {
-        uploadedFiles.add(file.name)
+        uploadedFiles.add(remoteName)
         uploadTargets.add(parentFolderId to remoteName)
         onUpload?.invoke(file)
         return Result.success(

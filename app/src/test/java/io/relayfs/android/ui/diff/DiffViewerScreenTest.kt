@@ -128,5 +128,20 @@ class DiffViewerScreenTest {
         composeTestRule.onNodeWithTag("btn_diff_resolved_done").assertIsDisplayed().performClick()
         assertTrue(doneClicked)
     }
+    @Test fun oversizedDiffKeepsAllResolutionActionsAvailable() {
+        var kept = false
+        composeTestRule.setContent {
+            RelayFSTheme {
+                DiffViewerScreen(DiffViewerUiState(isLoading = false, conflict = sampleConflict, diffResult = DiffAlgorithm.tooLarge()),
+                    onToggleMode = {}, onKeepLocal = { kept = true }, onKeepCloud = {}, onKeepBoth = {}, onNavigateUp = {})
+            }
+        }
+        composeTestRule.onNodeWithText("File too large for visual diff. You can still keep local, cloud, or both versions.").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_diff_keep_cloud").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_diff_keep_both").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_diff_keep_local").performClick()
+        assertTrue(kept)
+    }
+
 }
 

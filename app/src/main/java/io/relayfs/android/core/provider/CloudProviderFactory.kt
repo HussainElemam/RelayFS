@@ -30,6 +30,7 @@ class DefaultCloudProviderFactory(
 
     override suspend fun getProvider(accountId: String): CloudProvider? {
         val token = tokenStorage.getToken(accountId) ?: return null
+        if (tokenStorage.getIdentity(accountId) == null) return null
 
         // WebDAV credentials from prototype builds remain intentionally dormant until v2.
         // Do not reinterpret them as pCloud bearer tokens.
@@ -41,7 +42,7 @@ class DefaultCloudProviderFactory(
         val apiClient = PCloudApiClient(
             baseUrl = effectiveEndpoint,
             tokenProvider = {
-                runBlocking { tokenStorage.getToken(accountId) }
+                token
             },
             customOkHttpClient = customOkHttpClient
         )

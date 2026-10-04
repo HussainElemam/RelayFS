@@ -10,6 +10,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -84,7 +85,7 @@ class PCloudProviderTest {
         // Verify request received Authorization header
         val recorded = server.takeRequest(5, TimeUnit.SECONDS)
         assertNotNull(recorded)
-        assertEquals("Bearer $testToken", recorded?.getHeader("Authorization"))
+        assertNull(recorded?.getHeader("Authorization"))
         assertEquals("/userinfo", recorded?.path)
     }
 
@@ -171,6 +172,7 @@ class PCloudProviderTest {
                             "path": "/Vault/created.md",
                             "isfolder": false,
                             "size": 250,
+                            "modified": "Mon, 14 Sep 2026 12:00:00 +0000",
                             "hash": 11111
                         }
                     },
@@ -184,6 +186,7 @@ class PCloudProviderTest {
                             "path": "/Vault/modified.md",
                             "isfolder": false,
                             "size": 500,
+                            "modified": "Mon, 14 Sep 2026 12:05:00 +0000",
                             "hash": 22222
                         }
                     },
@@ -194,6 +197,8 @@ class PCloudProviderTest {
                         "metadata": {
                             "fileid": 303,
                             "name": "deleted.md",
+                            "modified": "Mon, 14 Sep 2026 12:10:00 +0000",
+                            "size": 0,
                             "path": "/Vault/deleted.md",
                             "isfolder": false,
                             "size": 0
@@ -242,7 +247,9 @@ class PCloudProviderTest {
                         "name": "small_test.txt",
                         "path": "/small_test.txt",
                         "isfolder": false,
-                        "size": ${testFile.length()},
+                        "modified": "Mon, 14 Sep 2026 12:00:00 +0000",
+                                "size": ${testFile.length()},
+                        "modified": "Mon, 14 Sep 2026 12:00:00 +0000",
                         "hash": 55555
                     }
                 ]
@@ -271,6 +278,44 @@ class PCloudProviderTest {
         val recorded = server.takeRequest(5, TimeUnit.SECONDS)
         assertNotNull(recorded)
         assertTrue(recorded?.path?.startsWith("/uploadfile?folderid=0&filename=small_test.txt") == true)
+    }
+
+    @Test
+    fun testSinglePartUploadPercentEncodesRemoteFilenameQueryParameter() = runTest {
+        val testFile = tempFolder.newFile("source.txt")
+        testFile.writeText("encoded filename")
+        val remoteName = "Quarterly Notes + #1.md"
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(200)
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    {
+                        "result": 0,
+                        "metadata": [
+                            {
+                                "fileid": 402,
+                                "name": "$remoteName",
+                                "path": "/$remoteName",
+                                "isfolder": false,
+                                "modified": "Mon, 14 Sep 2026 12:00:00 +0000",
+                                "size": ${testFile.length()}
+                            }
+                        ]
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val result = provider.uploadFile("d0", testFile, remoteName)
+
+        assertTrue(result.isSuccess)
+        val recorded = server.takeRequest(5, TimeUnit.SECONDS)
+        assertNotNull(recorded)
+        assertEquals(remoteName, recorded?.requestUrl?.queryParameter("filename"))
+        val encodedQuery = recorded?.requestUrl?.encodedQuery.orEmpty()
+        assertTrue(encodedQuery.contains("filename=Quarterly%20Notes%20%2B%20%231.md"))
     }
 
     @Test
@@ -318,6 +363,7 @@ class PCloudProviderTest {
                                 "name": "large_test.bin",
                                 "path": "/large_test.bin",
                                 "isfolder": false,
+                                "modified": "Mon, 14 Sep 2026 12:00:00 +0000",
                                 "size": $sixMb,
                                 "hash": 77777
                             }

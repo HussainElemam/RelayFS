@@ -37,7 +37,8 @@ data class BaselineItemSnapshot(
     val localSizeBytes: Long,
     val remoteSizeBytes: Long,
     val contentHash: String? = null,
-    val isDirectory: Boolean = false
+    val isDirectory: Boolean = false,
+    val remoteContentHash: String? = null
 )
 
 /**
@@ -63,11 +64,9 @@ object DeltaCalculator {
         val l = local!!
         val b = baseline!!
 
-        // If size matches and either modified time or content hash matches, no change
-        val unchanged = (l.sizeBytes == b.localSizeBytes) && (
-                l.modifiedTimeMillis == b.localModifiedTimeMillis ||
-                        (l.contentHash != null && b.contentHash != null && l.contentHash == b.contentHash)
-                )
+        val unchanged = l.sizeBytes == b.localSizeBytes &&
+            if (l.contentHash != null && b.contentHash != null) l.contentHash == b.contentHash
+            else l.modifiedTimeMillis == b.localModifiedTimeMillis
 
         return if (unchanged) EndpointDelta.NONE else EndpointDelta.MODIFIED
     }
@@ -83,10 +82,11 @@ object DeltaCalculator {
         val r = remote!!
         val b = baseline!!
 
-        val unchanged = (r.sizeBytes == b.remoteSizeBytes) && (
-                r.modifiedTimeMillis == b.remoteModifiedTimeMillis ||
-                        (r.contentHash != null && b.contentHash != null && r.contentHash == b.contentHash)
-                )
+        // Legacy baselines lack a comparable cloud revision. Revalidate them through transfer/branching once.
+        if (r.contentHash != null && b.remoteContentHash == null) return EndpointDelta.MODIFIED
+        val unchanged = r.sizeBytes == b.remoteSizeBytes && r.remoteId == b.remoteId &&
+            if (r.contentHash != null && b.remoteContentHash != null) r.contentHash == b.remoteContentHash
+            else r.modifiedTimeMillis == b.remoteModifiedTimeMillis
 
         return if (unchanged) EndpointDelta.NONE else EndpointDelta.MODIFIED
     }

@@ -25,9 +25,10 @@ import io.relayfs.android.core.database.entity.SyncLogEntity
         SyncBaselineEntity::class,
         SyncConflictEntity::class,
         SyncLogEntity::class,
-        SafMetadataEntity::class
+        SafMetadataEntity::class,
+        io.relayfs.android.core.database.entity.PendingUploadEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 @TypeConverters(DatabaseConverters::class)
@@ -38,6 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun syncConflictDao(): SyncConflictDao
     abstract fun syncLogDao(): SyncLogDao
     abstract fun safMetadataDao(): SafMetadataDao
+    abstract fun pendingUploadDao(): io.relayfs.android.core.database.dao.PendingUploadDao
 
     companion object {
         const val DATABASE_NAME = "relayfs.db"
@@ -66,6 +68,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE sync_baselines ADD COLUMN remoteContentHash TEXT")
+                db.execSQL("ALTER TABLE saf_metadata_cache ADD COLUMN contentHash TEXT")
+                db.execSQL("CREATE TABLE IF NOT EXISTS pending_uploads (id TEXT NOT NULL PRIMARY KEY, documentId TEXT NOT NULL, accountId TEXT NOT NULL, accountIdentity TEXT, localPath TEXT NOT NULL, parentFolderId TEXT NOT NULL, remoteName TEXT NOT NULL, expectedSize INTEGER NOT NULL, expectedModified INTEGER NOT NULL, expectedHash TEXT, state TEXT NOT NULL, error TEXT, createdAt INTEGER NOT NULL)")
+            }
+        }
+
         private val enableForeignKeysCallback = object : Callback() {
             override fun onOpen(db: SupportSQLiteDatabase) {
                 super.onOpen(db)
@@ -80,7 +90,7 @@ abstract class AppDatabase : RoomDatabase() {
                 DATABASE_NAME
             )
                 .addCallback(enableForeignKeysCallback)
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build()
         }
 

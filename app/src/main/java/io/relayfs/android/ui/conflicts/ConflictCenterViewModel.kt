@@ -76,7 +76,8 @@ class ConflictCenterViewModel(
         try {
             action()
             _uiState.update { it.copy(message = null) }
-        } catch (e: Exception) {
+        } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+        catch (e: Exception) {
             _uiState.update {
                 it.copy(message = "Could not resolve conflict: ${e.message ?: "unknown error"}")
             }

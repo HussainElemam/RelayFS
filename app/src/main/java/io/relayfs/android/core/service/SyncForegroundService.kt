@@ -37,7 +37,7 @@ class SyncForegroundService : Service() {
 
     private lateinit var database: AppDatabase
     private lateinit var coordinator: SyncCoordinator
-    private val activeWatchers = mutableListOf<RecursiveFileWatcher>()
+    private val activeWatchers = java.util.Collections.synchronizedList(mutableListOf<RecursiveFileWatcher>())
     private val activeSyncCount = AtomicInteger(0)
     @Volatile private var isWatcherModeActive: Boolean = false
     @Volatile private var isServiceDestroyed: Boolean = false
@@ -47,7 +47,7 @@ class SyncForegroundService : Service() {
         SyncNotificationManager.createNotificationChannels(this)
         database = AppDatabase.build(this)
         val providerFactory: CloudProviderFactory = customCloudProviderFactory
-            ?: DefaultCloudProviderFactory(EncryptedSharedPrefsTokenStorage(this))
+            ?: DefaultCloudProviderFactory(EncryptedSharedPrefsTokenStorage.create(this))
         coordinator = SyncCoordinator(
             database = database,
             cloudProviderFactory = providerFactory,
@@ -145,6 +145,9 @@ class SyncForegroundService : Service() {
     private fun startContinuousWatching() {
         serviceScope.launch {
             stopWatchingAll()
+            if (isServiceDestroyed) return@launch
+            isWatcherModeActive = true
+            try {
             val enabledPairs = database.folderPairDao().getEnabledPairs()
             for (pair in enabledPairs) {
                 val root = File(pair.localPath)
@@ -155,23 +158,29 @@ class SyncForegroundService : Service() {
                     debouncePeriodMs = 3_000L,
                     onDebouncedBatch = {
                         serviceScope.launch {
-                            coordinator.syncFolderPair(pair.id) { title, detail, current, total ->
-                                updateNotification(title, detail, total, current)
-                            }
+                            try {
+                                coordinator.syncFolderPair(pair.id) { title, detail, current, total -> updateNotification(title, detail, total, current) }
+                            } catch (e: CancellationException) { throw e }
+                            catch (e: Exception) { Log.e(TAG, "Watcher sync failed", e) }
                         }
                     }
                 )
 
-                val watcher = RecursiveFileWatcher(rootDir = root)
+                val watcher = RecursiveFileWatcher(rootDir = root, pathFilter = io.relayfs.android.core.watcher.filter.PathFilter(obsidianMode = pair.isObsidianVault))
 
                 debounceQueue.attachToWatcher(watcher)
                 watcher.startWatching()
-                activeWatchers.add(watcher)
+                synchronized(activeWatchers) {
+                    if (isServiceDestroyed) watcher.stopWatching() else activeWatchers.add(watcher)
+                }
             }
+            } catch (e: CancellationException) { throw e }
+            catch (e: Exception) { Log.e(TAG, "Could not start folder watchers", e); stopWatchingAll() }
         }
     }
 
     private fun stopWatchingAll() {
+        synchronized(activeWatchers) {
         for (watcher in activeWatchers) {
             try {
                 watcher.stopWatching()
@@ -179,6 +188,7 @@ class SyncForegroundService : Service() {
             }
         }
         activeWatchers.clear()
+        }
         isWatcherModeActive = false
     }
 
@@ -186,7 +196,7 @@ class SyncForegroundService : Service() {
         isServiceDestroyed = true
         stopWatchingAll()
         serviceScope.cancel()
-        if (::database.isInitialized) database.close()
+        serviceJob.invokeOnCompletion { if (::database.isInitialized) database.close() }
         super.onDestroy()
     }
 

@@ -5,13 +5,13 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class PCloudBaseResponse(
-    val result: Int = 0,
+    val result: Int,
     val error: String? = null
 )
 
 @Serializable
 data class PCloudFolderResponse(
-    val result: Int = 0,
+    val result: Int,
     val error: String? = null,
     val metadata: PCloudItemMetadata? = null
 )
@@ -25,9 +25,10 @@ data class PCloudItemMetadata(
     val path: String? = null,
     val isfolder: Boolean = false,
     val isdeleted: Boolean? = null,
-    val size: Long = 0L,
+    val size: Long = -1L,
     val modified: String? = null,
-    val hash: Long? = null,
+    @Serializable(with = RemoteHashSerializer::class)
+    val hash: String? = null,
     val contenttype: String? = null,
     val parentfolderid: Long? = null,
     val contents: List<PCloudItemMetadata>? = null
@@ -45,7 +46,7 @@ data class PCloudItemMetadata(
 
 @Serializable
 data class PCloudDiffResponse(
-    val result: Int = 0,
+    val result: Int,
     val error: String? = null,
     val diffid: Long = 0L,
     val entries: List<PCloudDiffEntry> = emptyList()
@@ -61,7 +62,7 @@ data class PCloudDiffEntry(
 
 @Serializable
 data class PCloudFileLinkResponse(
-    val result: Int = 0,
+    val result: Int,
     val error: String? = null,
     val hosts: List<String> = emptyList(),
     val path: String = "",
@@ -81,21 +82,21 @@ data class PCloudFileLinkResponse(
 
 @Serializable
 data class PCloudUploadCreateResponse(
-    val result: Int = 0,
+    val result: Int,
     val error: String? = null,
     val uploadid: Long = 0L
 )
 
 @Serializable
 data class PCloudUploadSaveResponse(
-    val result: Int = 0,
+    val result: Int,
     val error: String? = null,
     val metadata: List<PCloudItemMetadata> = emptyList()
 )
 
 @Serializable
 data class PCloudUserInfoResponse(
-    val result: Int = 0,
+    val result: Int,
     val error: String? = null,
     val email: String = "",
     val emailverified: Boolean = false,
@@ -112,7 +113,7 @@ data class PCloudTokenResponse(
     val tokenType: String = "bearer",
     val userid: Long = 0L,
     val locationid: Int = 1,
-    val result: Int = 0,
+    val result: Int,
     val error: String? = null
 )
 

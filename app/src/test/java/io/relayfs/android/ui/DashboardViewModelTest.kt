@@ -13,6 +13,12 @@ import io.relayfs.android.core.work.scheduler.SyncScheduler
 import io.relayfs.android.ui.dashboard.DashboardViewModel
 import io.relayfs.android.ui.dashboard.SyncHealth
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.first
+import io.relayfs.android.core.database.entity.PendingUploadEntity
+import io.relayfs.android.core.saf.PendingEdits
+import io.relayfs.android.core.sync.engine.SyncActivity
+import java.io.File
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -49,6 +55,7 @@ class DashboardViewModelTest {
     @After
     fun tearDown() {
         viewModel.cancelActiveJobs()
+        PendingEdits.openDescriptors.clear()
         database.close()
     }
 
@@ -103,6 +110,56 @@ class DashboardViewModelTest {
     fun testEmptyStateOverallHealthIsNotConfigured() {
         assertEquals(SyncHealth.NOT_CONFIGURED, viewModel.uiState.value.overallHealth)
         assertTrue(viewModel.uiState.value.folderPairs.isEmpty())
+    }
+    private suspend fun awaitHealth(health: SyncHealth) = withTimeout(5000) {
+        viewModel.uiState.first { it.overallHealth == health }
+    }
+
+    @Test fun neverSyncedPairAndQueuedWorkCannotAppearHealthy() = runBlocking<Unit> {
+        val pair = FolderPairEntity("health", "acc-1", "Health", "/sdcard/health", "d1", "/health")
+        database.folderPairDao().insert(pair)
+        awaitHealth(SyncHealth.NOT_SYNCED)
+        database.folderPairDao().updateLastSync(pair.id, 1000, SyncStatus.SUCCESS)
+        awaitHealth(SyncHealth.HEALTHY)
+        syncScheduler.schedulePeriodicSync(pair)
+        // A future periodic pass does not mean work is currently running.
+        assertTrue(syncScheduler.observeActiveWork().first().isEmpty())
+        assertEquals(SyncHealth.HEALTHY, viewModel.uiState.value.overallHealth)
+        viewModel.triggerSyncNow(pair.id).join()
+        awaitHealth(SyncHealth.SYNCING)
+        assertTrue(WorkManager.getInstance(context).getWorkInfosForUniqueWork(SyncScheduler.immediateWorkName(pair.id)).get().any { !it.state.isFinished })
+        syncScheduler.cancelSync(pair.id)
+        awaitHealth(SyncHealth.HEALTHY)
+    }
+
+    @Test fun foregroundExecutionIsVisibleUntilTheOperationActuallyFinishes() = runBlocking<Unit> {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val operation = launch(Dispatchers.IO) { SyncActivity.track { entered.complete(Unit); release.await() } }
+        try {
+            entered.await(); awaitHealth(SyncHealth.SYNCING)
+            assertTrue(viewModel.uiState.value.isSyncing)
+        } finally { release.complete(Unit); operation.join() }
+        awaitHealth(SyncHealth.NOT_CONFIGURED)
+    }
+
+    @Test fun pendingEditExportRetainsTheOriginalAndDiscardProtectsOpenDescriptors() = runBlocking<Unit> {
+        val source = File(context.filesDir, "pending-export").apply { writeText("unsynced valuable edit") }
+        val exported = File(context.filesDir, "exported-edit")
+        val row = PendingUploadEntity("export", "f1", "acc-1", "account#1", source.path, "d1", "note.md", 1, 1, "old", state = "ERROR")
+        try {
+            database.pendingUploadDao().upsert(row)
+            awaitHealth(SyncHealth.ERROR)
+            viewModel.exportPending(row.id, android.net.Uri.fromFile(exported)).join()
+            assertEquals("unsynced valuable edit", exported.readText())
+            assertTrue(source.exists()); assertTrue(database.pendingUploadDao().get(row.id) != null)
+            PendingEdits.openDescriptors.add(row.id)
+            viewModel.discardPending(row.id).join()
+            assertTrue(source.exists()); assertTrue(database.pendingUploadDao().get(row.id) != null)
+            PendingEdits.openDescriptors.remove(row.id)
+            viewModel.discardPending(row.id).join()
+            assertFalse(source.exists()); assertEquals(null, database.pendingUploadDao().get(row.id))
+        } finally { source.delete(); exported.delete() }
     }
 }
 

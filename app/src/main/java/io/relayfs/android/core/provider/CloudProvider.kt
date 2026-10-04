@@ -30,6 +30,8 @@ interface CloudProvider {
     /**
      * Lists children of a remote folder.
      *
+     * Returned item paths must be relative to the requested folder, with an optional leading slash.
+     *
      * @param remoteFolderId Remote folder identifier (or root identifier e.g. "0" or "/")
      * @param recursive If true, returns all descendants in a single pass (if supported by provider)
      */
@@ -99,6 +101,14 @@ interface CloudProvider {
      */
     suspend fun deleteItem(remoteId: String, isDirectory: Boolean): Result<Unit>
 
+    /** Creates without replacing an existing same-name file. */
+    suspend fun uploadNewFile(parentFolderId: String, file: File, remoteName: String): Result<CloudItem> =
+        Result.failure(UnsupportedOperationException("Provider cannot guarantee non-overwriting creation"))
+
+    /** Preserves an independent recovery copy before destructive cloud operations. */
+    suspend fun preserveFile(remoteId: String): Result<Unit> =
+        Result.failure(UnsupportedOperationException("Provider cannot preserve remote versions"))
+
     /**
      * Retrieves an image or video thumbnail for a remote file.
      * Implementations that do not support thumbnails may return a failure Result.
@@ -110,4 +120,3 @@ interface CloudProvider {
         destinationFile: File
     ): Result<Unit> = Result.failure(UnsupportedOperationException("Thumbnails not supported by this provider"))
 }
-

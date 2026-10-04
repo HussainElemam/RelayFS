@@ -11,10 +11,11 @@ import java.util.regex.Pattern
  * with optimized fast-paths for common high-frequency exclusions.
  */
 class PathFilter(
-    patterns: List<String> = DEFAULT_PATTERNS
+    patterns: List<String> = DEFAULT_PATTERNS,
+    private val obsidianMode: Boolean = true
 ) {
 
-    private val compiledPatterns: List<Pattern> = patterns.map { globToRegex(it) }
+    private val compiledPatterns: List<Pattern> = patterns.filter { obsidianMode || (!it.contains(".obsidian") && !it.contains(".trash")) }.map { globToRegex(it) }
 
     /**
      * Checks whether the specified relative path matches any exclusion pattern.
@@ -56,21 +57,22 @@ class PathFilter(
         if (fileName.endsWith(".sync_tmp")) return true
         if (fileName.endsWith(".tmp")) return true
         if (fileName.endsWith("~")) return true
-        if (CONFLICT_TEMP_FILE.matches(fileName)) return true
+        if (CONFLICT_TEMP_FILE.matches(fileName) || BOUNDED_CONFLICT_TEMP_FILE.matches(fileName)) return true
         if (fileName == ".DS_Store") return true
         if (fileName.equals("desktop.ini", ignoreCase = true)) return true
-        if (fileName == "workspace.json" && normalizedPath.contains(".obsidian")) return true
-        if (fileName == "workspace-mobile.json" && normalizedPath.contains(".obsidian")) return true
+        if (obsidianMode && fileName == "workspace.json" && normalizedPath.contains(".obsidian")) return true
+        if (obsidianMode && fileName == "workspace-mobile.json" && normalizedPath.contains(".obsidian")) return true
 
         // Directory segment checks
         val segments = normalizedPath.split('/')
-        if (segments.any { it == ".git" || it == ".trash" }) return true
-        if (segments.contains(".obsidian") && segments.contains("cache")) return true
+        if (segments.any { it == ".git" || it == ".relayfs-recovery" || (obsidianMode && it == ".trash") }) return true
+        if (obsidianMode && segments.contains(".obsidian") && segments.contains("cache")) return true
 
         return false
     }
 
     companion object {
+        private val BOUNDED_CONFLICT_TEMP_FILE = Regex("""^\.relayfs\.[0-9a-f]{64}\.(resolved|replacement|original)$""")
         private val CONFLICT_TEMP_FILE = Regex(
             """^\..+\.[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.(resolved|replacement|original)$"""
         )

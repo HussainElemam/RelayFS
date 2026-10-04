@@ -88,7 +88,7 @@ object ReconciliationPlanner {
         return when {
             // Local modified or created -> Upload
             deltaL == EndpointDelta.MODIFIED || deltaL == EndpointDelta.CREATED -> {
-                SyncAction.Upload(path, local!!, remoteFolderId)
+                SyncAction.Upload(path, local!!, remoteFolderId, remote)
             }
             // Local deleted -> Delete remote (mirroring local deletion)
             deltaL == EndpointDelta.DELETED -> {
@@ -96,7 +96,7 @@ object ReconciliationPlanner {
                     SyncAction.DeleteRemote(
                         path,
                         remote.remoteId,
-                        remote.isDirectory
+                        remote.isDirectory, remote
                     )
                 } else {
                     SyncAction.PruneBaseline(path)
@@ -104,7 +104,7 @@ object ReconciliationPlanner {
             }
             // Local unchanged, but remote was deleted -> Local is source of truth, restore to cloud
             deltaL == EndpointDelta.NONE && deltaR == EndpointDelta.DELETED && local != null -> {
-                SyncAction.Upload(path, local, remoteFolderId)
+                SyncAction.Upload(path, local, remoteFolderId, remote)
             }
             // Local unchanged (or doesn't exist) and remote was created/modified -> Do not download! Local is source of truth.
             else -> SyncAction.NoOp(path)
@@ -124,19 +124,19 @@ object ReconciliationPlanner {
         return when {
             // Remote modified or created -> Download
             deltaR == EndpointDelta.MODIFIED || deltaR == EndpointDelta.CREATED -> {
-                SyncAction.Download(path, remote!!, destFile)
+                SyncAction.Download(path, remote!!, destFile, local)
             }
             // Remote deleted -> Delete local (mirroring cloud deletion)
             deltaR == EndpointDelta.DELETED -> {
                 if (local != null || destFile.exists()) {
-                    SyncAction.DeleteLocal(path, local?.localFile ?: destFile)
+                    SyncAction.DeleteLocal(path, local?.localFile ?: destFile, local)
                 } else {
                     SyncAction.PruneBaseline(path)
                 }
             }
             // Remote unchanged, but local was deleted or modified -> Cloud is source of truth, restore to local
             deltaR == EndpointDelta.NONE && (deltaL == EndpointDelta.DELETED || deltaL == EndpointDelta.MODIFIED) && remote != null -> {
-                SyncAction.Download(path, remote, destFile)
+                SyncAction.Download(path, remote, destFile, local)
             }
             // Remote unchanged -> No-op
             else -> SyncAction.NoOp(path)
@@ -163,32 +163,32 @@ object ReconciliationPlanner {
 
             // Case 2: Local modified, remote unchanged -> Upload L to R
             deltaL == EndpointDelta.MODIFIED && deltaR == EndpointDelta.NONE -> {
-                SyncAction.Upload(path, local!!, remoteFolderId)
+                SyncAction.Upload(path, local!!, remoteFolderId, remote)
             }
 
             // Case 3: Remote modified, local unchanged -> Download R to L
             deltaL == EndpointDelta.NONE && deltaR == EndpointDelta.MODIFIED -> {
-                SyncAction.Download(path, remote!!, destFile)
+                SyncAction.Download(path, remote!!, destFile, local)
             }
 
             // Case 4: Local created, never on remote -> Upload L to R
             deltaL == EndpointDelta.CREATED && (deltaR == EndpointDelta.NONE || deltaR == EndpointDelta.DELETED) && remote == null -> {
-                SyncAction.Upload(path, local!!, remoteFolderId)
+                SyncAction.Upload(path, local!!, remoteFolderId, remote)
             }
 
             // Case 5: Remote created, never on local -> Download R to L
             (deltaL == EndpointDelta.NONE || deltaL == EndpointDelta.DELETED) && deltaR == EndpointDelta.CREATED && local == null -> {
-                SyncAction.Download(path, remote!!, destFile)
+                SyncAction.Download(path, remote!!, destFile, local)
             }
 
             // Case 6: Local deleted, remote unchanged -> Delete R on cloud
             deltaL == EndpointDelta.DELETED && deltaR == EndpointDelta.NONE -> {
-                SyncAction.DeleteRemote(path, remote?.remoteId ?: baseline?.remoteId ?: "", remote?.isDirectory ?: baseline?.isDirectory ?: false)
+                SyncAction.DeleteRemote(path, remote?.remoteId ?: baseline?.remoteId ?: "", remote?.isDirectory ?: baseline?.isDirectory ?: false, remote)
             }
 
             // Case 7: Remote deleted, local unchanged -> Delete L on device
             deltaL == EndpointDelta.NONE && deltaR == EndpointDelta.DELETED -> {
-                SyncAction.DeleteLocal(path, local?.localFile ?: destFile)
+                SyncAction.DeleteLocal(path, local?.localFile ?: destFile, local)
             }
 
             // Cases 8 & 9: Both modified or both created concurrently
@@ -197,7 +197,7 @@ object ReconciliationPlanner {
                 val localHash = local?.contentHash
                 val remoteHash = remote?.contentHash
 
-                if (localHash != null && remoteHash != null && localHash == remoteHash) {
+                if (localHash != null && remoteHash != null && remoteHash.startsWith("xxh64:") && "xxh64:$localHash" == remoteHash) {
                     // Case 8: False conflict (identical content edit) -> update baseline without data transfer
                     SyncAction.ResolveFalseConflict(path, local!!, remote!!)
                 } else {
@@ -218,12 +218,12 @@ object ReconciliationPlanner {
 
             // Case 10: Local modified, remote deleted -> User edited locally while deleted on cloud -> Re-upload
             deltaL == EndpointDelta.MODIFIED && deltaR == EndpointDelta.DELETED -> {
-                SyncAction.ConflictPreserveLocal(path, local!!, remoteFolderId)
+                SyncAction.ConflictPreserveLocal(path, local!!, remoteFolderId, remote)
             }
 
             // Case 11: Local deleted, remote modified -> User deleted locally while edited on cloud -> Re-download
             deltaL == EndpointDelta.DELETED && deltaR == EndpointDelta.MODIFIED -> {
-                SyncAction.ConflictPreserveRemote(path, remote!!, destFile)
+                SyncAction.ConflictPreserveRemote(path, remote!!, destFile, local)
             }
 
             // Both deleted concurrently -> Clean up obsolete baseline record
@@ -234,9 +234,9 @@ object ReconciliationPlanner {
             // Fallback safety: if unknown combination, preserve local file
             else -> {
                 if (local != null) {
-                    SyncAction.Upload(path, local, remoteFolderId)
+                    SyncAction.Upload(path, local, remoteFolderId, remote)
                 } else if (remote != null) {
-                    SyncAction.Download(path, remote, destFile)
+                    SyncAction.Download(path, remote, destFile, local)
                 } else if (baseline != null) {
                     SyncAction.PruneBaseline(path)
                 } else {

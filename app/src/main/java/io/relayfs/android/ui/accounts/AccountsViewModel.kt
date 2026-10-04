@@ -31,13 +31,13 @@ data class AccountsUiState(
 
 class AccountsViewModel(
     private val tokenStorage: TokenStorage,
-    private val defaultClientId: String = BuildConfig.PCLOUD_CLIENT_ID
+    private val defaultClientId: String = BuildConfig.PCLOUD_CLIENT_ID,
+    private val sessionManager: io.relayfs.android.core.security.AccountSessionManager? = null
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AccountsUiState(isLoading = true))
     val uiState: StateFlow<AccountsUiState> = _uiState.asStateFlow()
 
-    private var pendingCodeVerifier: String? = null
     private var oauthJob: Job? = null
 
     init {
@@ -58,11 +58,15 @@ class AccountsViewModel(
                 return@launch
             }
 
+            if (tokenStorage.getIdentity(DEFAULT_ACCOUNT_ID) == null) {
+                _uiState.update { it.copy(isConnected = false, isLoading = false, errorMessage = "Reconnect to verify account identity before syncing.") }
+                return@launch
+            }
             val endpoint = tokenStorage.getEndpoint(DEFAULT_ACCOUNT_ID) ?: PCloudApiClient.US_API_URL
             try {
                 val client = PCloudApiClient(
                     baseUrl = endpoint,
-                    tokenProvider = { runBlocking { tokenStorage.getToken(DEFAULT_ACCOUNT_ID) } }
+                    tokenProvider = { token }
                 )
                 val response = client.apiService.getUserInfo()
                 val body = response.body()
@@ -86,7 +90,8 @@ class AccountsViewModel(
                         )
                     }
                 }
-            } catch (e: Exception) {
+            } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         isConnected = false,
@@ -104,49 +109,15 @@ class AccountsViewModel(
                 _uiState.update { it.copy(isLoading = true, errorMessage = null) }
 
                 try {
-                    // Token flow (implicit): token received directly in redirect fragment
-                    val token = callbackData.accessToken
-                    if (!token.isNullOrBlank()) {
-                        val endpoint = PCloudApiClient.getBaseUrlForLocation(callbackData.locationId)
-                        tokenStorage.saveToken(DEFAULT_ACCOUNT_ID, token)
-                        tokenStorage.saveEndpoint(DEFAULT_ACCOUNT_ID, endpoint)
+                    if (callbackData.errorMessage != null) {
+                        _uiState.update { it.copy(isLoading = false, errorMessage = callbackData.errorMessage) }
+                    } else {
+                        // Callback activity verifies identity and commits tokens. UI events never replace credentials.
                         loadAccount()
-                        return@collect
                     }
 
-                    // Fallback to Code flow if an authorization code was returned
-                    val authCode = callbackData.authCode
-                    if (!authCode.isNullOrBlank()) {
-                        val verifier = pendingCodeVerifier ?: ""
-                        val baseUrl = PCloudApiClient.getBaseUrlForLocation(callbackData.locationId)
-
-                        val client = PCloudApiClient(
-                            baseUrl = baseUrl,
-                            tokenProvider = { null }
-                        )
-
-                        val response = client.apiService.exchangeToken(
-                            clientId = defaultClientId,
-                            code = authCode,
-                            codeVerifier = verifier
-                        )
-
-                        val body = response.body()
-                        if (response.isSuccessful && body != null && body.result == 0) {
-                            tokenStorage.saveToken(DEFAULT_ACCOUNT_ID, body.accessToken)
-                            tokenStorage.saveEndpoint(DEFAULT_ACCOUNT_ID, baseUrl)
-                            pendingCodeVerifier = null
-                            loadAccount()
-                        } else {
-                            _uiState.update {
-                                it.copy(
-                                    isLoading = false,
-                                    errorMessage = "Token exchange failed: ${body?.error ?: response.message()}"
-                                )
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
+                } catch (e: kotlinx.coroutines.CancellationException) { throw e }
+            catch (e: Exception) {
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -183,7 +154,8 @@ class AccountsViewModel(
 
     fun disconnect(): Job {
         return viewModelScope.launch {
-            tokenStorage.deleteToken(DEFAULT_ACCOUNT_ID)
+            if (sessionManager != null) sessionManager.disconnect()
+            else tokenStorage.deleteToken(DEFAULT_ACCOUNT_ID)
             _uiState.update {
                 AccountsUiState(isConnected = false, showDisconnectDialog = false)
             }
@@ -194,10 +166,10 @@ class AccountsViewModel(
         const val DEFAULT_ACCOUNT_ID = "pcloud_default"
     }
 
-    class Factory(private val tokenStorage: TokenStorage) : ViewModelProvider.Factory {
+    class Factory(private val tokenStorage: TokenStorage, private val sessionManager: io.relayfs.android.core.security.AccountSessionManager? = null) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return AccountsViewModel(tokenStorage) as T
+            return AccountsViewModel(tokenStorage, sessionManager = sessionManager) as T
         }
     }
 }

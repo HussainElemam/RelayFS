@@ -1,0 +1,8 @@
+// Adds audit-only tests without modifying application source sets permanently.
+gradle.beforeProject { project ->
+    project.pluginManager.withPlugin('com.android.application') {
+        project.android.sourceSets.test.java.srcDir(
+            new File(project.rootDir, 'docs/reports/2026-10-04-audit-reproductions')
+        )
+    }
+}

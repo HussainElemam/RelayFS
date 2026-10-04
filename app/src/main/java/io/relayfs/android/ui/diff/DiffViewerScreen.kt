@@ -154,6 +154,11 @@ fun DiffViewerScreen(
                     }
                 }
 
+                uiState.diffResult?.tooLarge == true -> {
+                    Text("File too large for visual diff. You can still keep local, cloud, or both versions.",
+                        modifier = Modifier.align(Alignment.Center).padding(24.dp))
+                }
+
                 uiState.diffResult != null -> {
                     Column(modifier = Modifier.fillMaxSize()) {
                         DiffSummaryBar(summary = uiState.diffResult.summary)
